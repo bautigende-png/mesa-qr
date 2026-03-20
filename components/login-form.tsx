@@ -42,8 +42,7 @@ export function LoginForm({ title, subtitle, redirectTo }: LoginFormProps) {
       return;
     }
 
-    router.push(redirectTo);
-    router.refresh();
+    window.location.assign(redirectTo);
   }
 
   return (

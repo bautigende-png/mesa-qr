@@ -157,7 +157,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   async function playBeep() {
     const context = await ensureAudioContext();
     if (!context) {
-      return;
+      return false;
     }
 
     const bursts = [
@@ -190,6 +190,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     });
 
     setSoundStatus("Sonido activo. Las alertas ahora usan 3 beeps más notorios.");
+    return true;
   }
 
   function triggerHaptics() {
@@ -200,9 +201,11 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
 
   async function enableSound() {
     triggerHaptics();
-    await playBeep();
-    window.localStorage.setItem(SOUND_KEY, "true");
-    setSoundEnabled(true);
+    const unlocked = await playBeep();
+    if (unlocked) {
+      window.localStorage.setItem(SOUND_KEY, "true");
+      setSoundEnabled(true);
+    }
   }
 
   function disableSound() {
@@ -290,9 +293,13 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
             )}
             <button
               className="button-secondary gap-2"
-              onClick={() => {
+              onClick={async () => {
                 triggerHaptics();
-                void playBeep();
+                const unlocked = await playBeep();
+                if (unlocked) {
+                  window.localStorage.setItem(SOUND_KEY, "true");
+                  setSoundEnabled(true);
+                }
               }}
             >
               <Bell className="h-4 w-4" />

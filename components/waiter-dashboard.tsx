@@ -30,6 +30,7 @@ type AudioContextLike = AudioContext & {
 };
 
 const SOUND_KEY = "mesa-lista.waiter-sound-enabled";
+const ALERT_VIBRATION_PATTERN = [250, 100, 250, 100, 350];
 
 export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps) {
   const router = useRouter();
@@ -120,9 +121,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
         setSoundStatus("Llegó un evento nuevo. Activá sonido para escuchar el beep en este dispositivo.");
       }
 
-      if ("vibrate" in navigator) {
-        navigator.vibrate?.([120, 60, 120]);
-      }
+      triggerHaptics();
 
       setHighlightedIds((current) => Array.from(new Set([...newIds, ...current])));
       window.setTimeout(() => {
@@ -161,22 +160,46 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       return;
     }
 
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
+    const bursts = [
+      { startOffset: 0, duration: 0.16, frequency: 880 },
+      { startOffset: 0.26, duration: 0.16, frequency: 880 },
+      { startOffset: 0.52, duration: 0.2, frequency: 960 }
+    ];
 
-    oscillator.type = "sine";
-    oscillator.frequency.value = 880;
-    gain.gain.value = 0.05;
+    bursts.forEach((burst) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
 
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.18);
+      oscillator.type = "sine";
+      oscillator.frequency.value = burst.frequency;
 
-    setSoundStatus("Sonido activo. Las próximas alertas deberían sonar también en iPhone.");
+      gain.gain.setValueAtTime(0.0001, context.currentTime + burst.startOffset);
+      gain.gain.exponentialRampToValueAtTime(
+        0.11,
+        context.currentTime + burst.startOffset + 0.02
+      );
+      gain.gain.exponentialRampToValueAtTime(
+        0.0001,
+        context.currentTime + burst.startOffset + burst.duration
+      );
+
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(context.currentTime + burst.startOffset);
+      oscillator.stop(context.currentTime + burst.startOffset + burst.duration);
+    });
+
+    setSoundStatus("Sonido activo. Las alertas ahora usan 3 beeps más notorios.");
+  }
+
+  function triggerHaptics() {
+    if ("vibrate" in navigator) {
+      navigator.vibrate?.(ALERT_VIBRATION_PATTERN);
+    }
   }
 
   async function enableSound() {
+    triggerHaptics();
     await playBeep();
     window.localStorage.setItem(SOUND_KEY, "true");
     setSoundEnabled(true);
@@ -265,7 +288,13 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
                 Desactivar
               </button>
             )}
-            <button className="button-secondary gap-2" onClick={() => void playBeep()}>
+            <button
+              className="button-secondary gap-2"
+              onClick={() => {
+                triggerHaptics();
+                void playBeep();
+              }}
+            >
               <Bell className="h-4 w-4" />
               Probar sonido
             </button>

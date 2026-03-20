@@ -1,0 +1,272 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BellRing, CheckCheck, Clock3, Loader2, LogOut, Sparkles, TimerReset } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+import { ACTION_LABELS, STATUS_LABELS } from "@/lib/constants";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
+import { EventRecord, Profile } from "@/lib/types";
+import { formatElapsed } from "@/lib/utils";
+
+interface WaiterDashboardProps {
+  profile: Profile;
+  initialEvents: EventRecord[];
+}
+
+export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps) {
+  const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [events, setEvents] = useState<EventRecord[]>(initialEvents);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
+  const previousIds = useRef(new Set(initialEvents.map((event) => event.id)));
+
+  useEffect(() => {
+    const fetchLatest = async () => {
+      const response = await fetch("/api/waiter/events", { cache: "no-store" });
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = (await response.json()) as { events: EventRecord[] };
+      mergeIncoming(payload.events);
+    };
+
+    const interval = window.setInterval(fetchLatest, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
+    const channel = supabase
+      .channel("waiter-events")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "events"
+        },
+        () => {
+          void refreshEvents();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase]);
+
+  async function refreshEvents() {
+    const response = await fetch("/api/waiter/events", { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+
+    const payload = (await response.json()) as { events: EventRecord[] };
+    mergeIncoming(payload.events);
+  }
+
+  function mergeIncoming(nextEvents: EventRecord[]) {
+    const newIds = nextEvents
+      .filter((event) => !previousIds.current.has(event.id) && event.status === "PENDING")
+      .map((event) => event.id);
+
+    setEvents(nextEvents);
+
+    if (newIds.length > 0) {
+      playBeep();
+      if ("vibrate" in navigator) {
+        navigator.vibrate?.([120, 60, 120]);
+      }
+      setHighlightedIds((current) => Array.from(new Set([...newIds, ...current])));
+      window.setTimeout(() => {
+        setHighlightedIds((current) => current.filter((id) => !newIds.includes(id)));
+      }, 7000);
+    }
+
+    previousIds.current = new Set(nextEvents.map((event) => event.id));
+  }
+
+  function playBeep() {
+    const webkitWindow = window as Window & {
+      webkitAudioContext?: typeof AudioContext;
+    };
+    const AudioContextClass = window.AudioContext ?? webkitWindow.webkitAudioContext ?? null;
+
+    if (!AudioContextClass) {
+      return;
+    }
+
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.value = 880;
+    gain.gain.value = 0.04;
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.12);
+
+    oscillator.onended = () => {
+      void context.close();
+    };
+  }
+
+  async function updateStatus(eventId: string, status: "ACKNOWLEDGED" | "RESOLVED") {
+    setPendingActionId(eventId + status);
+
+    const response = await fetch(`/api/waiter/events/${eventId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ status })
+    });
+
+    setPendingActionId(null);
+
+    if (!response.ok) {
+      return;
+    }
+
+    await refreshEvents();
+  }
+
+  async function handleLogout() {
+    if (!supabase) {
+      router.push("/");
+      router.refresh();
+      return;
+    }
+
+    await supabase.auth.signOut();
+    router.push("/waiter");
+    router.refresh();
+  }
+
+  const pendingCount = events.filter((event) => event.status === "PENDING").length;
+
+  return (
+    <main className="shell space-y-5">
+      <section className="panel overflow-hidden">
+        <div className="flex flex-col gap-6 bg-slate-950 px-6 py-7 text-white sm:flex-row sm:items-end sm:justify-between sm:px-8">
+          <div>
+            <div className="text-xs uppercase tracking-[0.28em] text-amber-300">Panel mozo</div>
+            <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+              Sala en tiempo real
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+              Sesión iniciada como {profile.email}. Las alertas nuevas disparan sonido,
+              vibración y destaque visual.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.24em] text-slate-400">
+                Pendientes
+              </div>
+              <div className="mt-1 text-2xl font-semibold">{pendingCount}</div>
+            </div>
+            <button className="button-secondary gap-2" onClick={handleLogout}>
+              <LogOut className="h-4 w-4" />
+              Salir
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4">
+        {events.length === 0 ? (
+          <div className="panel px-6 py-12 text-center sm:px-8">
+            <Sparkles className="mx-auto h-10 w-10 text-amber-600" />
+            <h2 className="mt-4 text-xl font-semibold text-slate-900">Todo al día</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              No hay eventos pendientes o recientes para mostrar.
+            </p>
+          </div>
+        ) : null}
+
+        {events.map((event) => {
+          const highlighted = highlightedIds.includes(event.id);
+          const busyAck = pendingActionId === `${event.id}ACKNOWLEDGED`;
+          const busyResolve = pendingActionId === `${event.id}RESOLVED`;
+
+          return (
+            <article
+              key={event.id}
+              className={`panel px-5 py-5 transition sm:px-6 ${
+                highlighted ? "ring-2 ring-amber-300" : ""
+              }`}
+            >
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white">
+                      {event.restaurant_tables?.table_name ?? "Mesa"}
+                    </span>
+                    {event.restaurant_tables?.sector ? (
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        {event.restaurant_tables.sector}
+                      </span>
+                    ) : null}
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                      {STATUS_LABELS[event.status]}
+                    </span>
+                    {highlighted ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                        <BellRing className="h-3.5 w-3.5" />
+                        Nuevo
+                      </span>
+                    ) : null}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-semibold text-slate-900">
+                      {ACTION_LABELS[event.action]}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Cliente: {event.customer_email}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <Clock3 className="h-4 w-4 text-amber-700" />
+                    Esperando hace {formatElapsed(event.created_at)}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className="button-secondary gap-2"
+                      disabled={event.status !== "PENDING" || busyAck || busyResolve}
+                      onClick={() => updateStatus(event.id, "ACKNOWLEDGED")}
+                    >
+                      {busyAck ? <Loader2 className="h-4 w-4 animate-spin" /> : <TimerReset className="h-4 w-4" />}
+                      ACKNOWLEDGED
+                    </button>
+                    <button
+                      className="button-primary gap-2"
+                      disabled={event.status === "RESOLVED" || busyAck || busyResolve}
+                      onClick={() => updateStatus(event.id, "RESOLVED")}
+                    >
+                      {busyResolve ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCheck className="h-4 w-4" />}
+                      RESOLVED
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+    </main>
+  );
+}

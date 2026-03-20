@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ACTION_LABELS, EVENT_COOLDOWN_MS } from "@/lib/constants";
 import { getDemoStore } from "@/lib/demo-store";
 import { isDemoMode } from "@/lib/runtime";
-import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 const createEventSchema = z.object({
   tableId: z.string().uuid(),
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
 
   const { data: table } = await supabase
     .from("restaurant_tables")

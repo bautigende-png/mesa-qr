@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getDemoStore } from "@/lib/demo-store";
 import { requireApiRole } from "@/lib/api";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isDemoMode } from "@/lib/runtime";
 
 const statusSchema = z.object({
@@ -45,12 +46,13 @@ export async function PATCH(request: NextRequest, { params }: RouteProps) {
     return auth.error;
   }
 
+  const admin = createSupabaseAdminClient();
   const payload =
     parsed.data.status === "ACKNOWLEDGED"
       ? { status: "ACKNOWLEDGED", acknowledged_at: new Date().toISOString() }
       : { status: "RESOLVED", resolved_at: new Date().toISOString() };
 
-  const { error } = await auth.supabase.from("events").update(payload).eq("id", eventId);
+  const { error } = await admin.from("events").update(payload).eq("id", eventId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

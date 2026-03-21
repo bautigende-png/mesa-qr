@@ -31,6 +31,7 @@ type AudioContextLike = AudioContext & {
 
 const SOUND_KEY = "mesa-lista.waiter-sound-enabled";
 const ALERT_VIBRATION_PATTERN = [250, 100, 250, 100, 350];
+const TITLE_FLASH_MS = 1200;
 
 export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps) {
   const router = useRouter();
@@ -43,7 +44,11 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     "Activá el sonido con un toque para asegurar alertas en iPhone y Safari."
   );
   const previousIds = useRef(new Set(initialEvents.map((event) => event.id)));
+  const previousPendingIds = useRef(
+    new Set(initialEvents.filter((event) => event.status === "PENDING").map((event) => event.id))
+  );
   const audioContextRef = useRef<AudioContextLike | null>(null);
+  const titleFlashRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -94,6 +99,10 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
         void audioContextRef.current.close();
         audioContextRef.current = null;
       }
+      if (titleFlashRef.current) {
+        window.clearTimeout(titleFlashRef.current);
+      }
+      document.title = "Mesa Lista";
     };
   }, [supabase]);
 
@@ -108,20 +117,21 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   }
 
   function mergeIncoming(nextEvents: EventRecord[]) {
+    const nextPendingIds = new Set(
+      nextEvents.filter((event) => event.status === "PENDING").map((event) => event.id)
+    );
     const newIds = nextEvents
-      .filter((event) => !previousIds.current.has(event.id) && event.status === "PENDING")
+      .filter(
+        (event) =>
+          event.status === "PENDING" &&
+          (!previousIds.current.has(event.id) || !previousPendingIds.current.has(event.id))
+      )
       .map((event) => event.id);
 
     setEvents(nextEvents);
 
     if (newIds.length > 0) {
-      if (soundEnabled) {
-        void playBeep();
-      } else {
-        setSoundStatus("Llegó un evento nuevo. Activá sonido para escuchar el beep en este dispositivo.");
-      }
-
-      triggerHaptics();
+      void triggerAlertFeedback();
 
       setHighlightedIds((current) => Array.from(new Set([...newIds, ...current])));
       window.setTimeout(() => {
@@ -130,6 +140,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     }
 
     previousIds.current = new Set(nextEvents.map((event) => event.id));
+    previousPendingIds.current = nextPendingIds;
   }
 
   async function ensureAudioContext() {
@@ -175,7 +186,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
 
       gain.gain.setValueAtTime(0.0001, context.currentTime + burst.startOffset);
       gain.gain.exponentialRampToValueAtTime(
-        0.11,
+        0.2,
         context.currentTime + burst.startOffset + 0.02
       );
       gain.gain.exponentialRampToValueAtTime(
@@ -196,6 +207,30 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   function triggerHaptics() {
     if ("vibrate" in navigator) {
       navigator.vibrate?.(ALERT_VIBRATION_PATTERN);
+    }
+  }
+
+  function flashTitle() {
+    document.title = "Nuevo llamado - Mesa Lista";
+    if (titleFlashRef.current) {
+      window.clearTimeout(titleFlashRef.current);
+    }
+    titleFlashRef.current = window.setTimeout(() => {
+      document.title = "Mesa Lista";
+      titleFlashRef.current = null;
+    }, TITLE_FLASH_MS);
+  }
+
+  async function triggerAlertFeedback() {
+    flashTitle();
+    triggerHaptics();
+
+    if (soundEnabled) {
+      await playBeep();
+    } else {
+      setSoundStatus(
+        "Llegó un evento nuevo. Activá sonido para escuchar el beep en este dispositivo."
+      );
     }
   }
 

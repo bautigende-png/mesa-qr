@@ -25,13 +25,74 @@ interface WaiterDashboardProps {
   initialEvents: EventRecord[];
 }
 
-type AudioContextLike = AudioContext & {
-  webkitClose?: () => Promise<void>;
-};
-
 const SOUND_KEY = "mesa-lista.waiter-sound-enabled";
 const ALERT_VIBRATION_PATTERN = [250, 100, 250, 100, 350];
 const TITLE_FLASH_MS = 1200;
+
+function createAlertSoundDataUri() {
+  const sampleRate = 22_050;
+  const durationSeconds = 1.1;
+  const totalSamples = Math.floor(sampleRate * durationSeconds);
+  const samples = new Int16Array(totalSamples);
+
+  const beeps = [
+    { start: 0.0, duration: 0.18, frequency: 880, volume: 0.88 },
+    { start: 0.28, duration: 0.18, frequency: 880, volume: 0.88 },
+    { start: 0.56, duration: 0.24, frequency: 960, volume: 0.98 }
+  ];
+
+  for (let i = 0; i < totalSamples; i += 1) {
+    const t = i / sampleRate;
+    let value = 0;
+
+    for (const beep of beeps) {
+      if (t >= beep.start && t <= beep.start + beep.duration) {
+        const elapsed = t - beep.start;
+        const fadeIn = Math.min(1, elapsed / 0.02);
+        const fadeOut = Math.min(1, (beep.start + beep.duration - t) / 0.04);
+        const envelope = Math.max(0, Math.min(fadeIn, fadeOut));
+        value += Math.sin(2 * Math.PI * beep.frequency * elapsed) * beep.volume * envelope;
+      }
+    }
+
+    samples[i] = Math.max(-1, Math.min(1, value)) * 32767;
+  }
+
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  function writeString(offset: number, value: string) {
+    for (let i = 0; i < value.length; i += 1) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  }
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+
+  samples.forEach((sample, index) => {
+    view.setInt16(44 + index * 2, sample, true);
+  });
+
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return `data:audio/wav;base64,${btoa(binary)}`;
+}
 
 export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps) {
   const router = useRouter();
@@ -44,7 +105,6 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     "Activá el sonido con un toque para asegurar alertas en iPhone y Safari."
   );
   const [lastAlertDebug, setLastAlertDebug] = useState("Sin alertas nuevas todavía.");
-  const previousIds = useRef(new Set(initialEvents.map((event) => event.id)));
   const previousPendingIds = useRef(
     new Set(initialEvents.filter((event) => event.status === "PENDING").map((event) => event.id))
   );
@@ -53,8 +113,8 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       .filter((event) => event.status === "PENDING")
       .reduce((latest, event) => (event.created_at > latest ? event.created_at : latest), "")
   );
-  const audioContextRef = useRef<AudioContextLike | null>(null);
   const titleFlashRef = useRef<number | null>(null);
+  const alertAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -62,6 +122,22 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     }
 
     setSoundEnabled(window.localStorage.getItem(SOUND_KEY) === "true");
+
+    const audio = new Audio(createAlertSoundDataUri());
+    audio.preload = "auto";
+    audio.setAttribute("playsinline", "true");
+    alertAudioRef.current = audio;
+
+    return () => {
+      if (titleFlashRef.current) {
+        window.clearTimeout(titleFlashRef.current);
+      }
+      document.title = "Mesa Lista";
+      if (alertAudioRef.current) {
+        alertAudioRef.current.pause();
+        alertAudioRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -101,14 +177,6 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
 
     return () => {
       void supabase.removeChannel(channel);
-      if (audioContextRef.current) {
-        void audioContextRef.current.close();
-        audioContextRef.current = null;
-      }
-      if (titleFlashRef.current) {
-        window.clearTimeout(titleFlashRef.current);
-      }
-      document.title = "Mesa Lista";
     };
   }, [supabase]);
 
@@ -123,18 +191,16 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   }
 
   function mergeIncoming(nextEvents: EventRecord[]) {
-    const nextPendingIds = new Set(
-      nextEvents.filter((event) => event.status === "PENDING").map((event) => event.id)
+    const pendingEvents = nextEvents.filter((event) => event.status === "PENDING");
+    const nextPendingIds = new Set(pendingEvents.map((event) => event.id));
+    const newestPendingCreatedAt = pendingEvents.reduce(
+      (latest, event) => (event.created_at > latest ? event.created_at : latest),
+      ""
     );
-    const newestPendingCreatedAt = nextEvents
-      .filter((event) => event.status === "PENDING")
-      .reduce((latest, event) => (event.created_at > latest ? event.created_at : latest), "");
 
-    const newIds = nextEvents
-      .filter((event) => event.status === "PENDING")
+    const newIds = pendingEvents
       .filter(
         (event) =>
-          !previousIds.current.has(event.id) ||
           !previousPendingIds.current.has(event.id) ||
           event.created_at > latestSeenPendingCreatedAt.current
       )
@@ -150,76 +216,37 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
         `Ultima alerta: ${new Date().toLocaleTimeString("es-AR")} · nuevos pendientes ${Math.max(newIds.length, nextPendingIds.size - previousPendingIds.current.size)}`
       );
 
-      setHighlightedIds((current) => Array.from(new Set([...newIds, ...current])));
+      const idsToHighlight = newIds.length > 0 ? newIds : pendingEvents.map((event) => event.id);
+      setHighlightedIds((current) => Array.from(new Set([...idsToHighlight, ...current])));
       window.setTimeout(() => {
-        setHighlightedIds((current) => current.filter((id) => !newIds.includes(id)));
+        setHighlightedIds((current) => current.filter((id) => !idsToHighlight.includes(id)));
       }, 7000);
     }
 
-    previousIds.current = new Set(nextEvents.map((event) => event.id));
     previousPendingIds.current = nextPendingIds;
     latestSeenPendingCreatedAt.current = newestPendingCreatedAt;
   }
 
-  async function ensureAudioContext() {
-    const webkitWindow = window as Window & {
-      webkitAudioContext?: typeof AudioContext;
-    };
-    const AudioContextClass = window.AudioContext ?? webkitWindow.webkitAudioContext ?? null;
+  async function playAlertSound() {
+    const audio = alertAudioRef.current;
 
-    if (!AudioContextClass) {
-      setSoundStatus("Este navegador no permite generar sonido desde el panel.");
-      return null;
-    }
-
-    if (!audioContextRef.current || audioContextRef.current.state === "closed") {
-      audioContextRef.current = new AudioContextClass() as AudioContextLike;
-    }
-
-    if (audioContextRef.current.state === "suspended") {
-      await audioContextRef.current.resume();
-    }
-
-    return audioContextRef.current;
-  }
-
-  async function playBeep() {
-    const context = await ensureAudioContext();
-    if (!context) {
+    if (!audio) {
+      setSoundStatus("No pudimos preparar el audio de alertas en este dispositivo.");
       return false;
     }
 
-    const bursts = [
-      { startOffset: 0, duration: 0.16, frequency: 880 },
-      { startOffset: 0.26, duration: 0.16, frequency: 880 },
-      { startOffset: 0.52, duration: 0.2, frequency: 960 }
-    ];
-
-    bursts.forEach((burst) => {
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-
-      oscillator.type = "sine";
-      oscillator.frequency.value = burst.frequency;
-
-      gain.gain.setValueAtTime(0.0001, context.currentTime + burst.startOffset);
-      gain.gain.exponentialRampToValueAtTime(
-        0.2,
-        context.currentTime + burst.startOffset + 0.02
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      await audio.play();
+      setSoundStatus("Sonido activo. Las alertas usan 3 beeps fuertes.");
+      return true;
+    } catch {
+      setSoundStatus(
+        "El navegador bloqueó el audio. Tocá Activar sonido o Probar sonido otra vez."
       );
-      gain.gain.exponentialRampToValueAtTime(
-        0.0001,
-        context.currentTime + burst.startOffset + burst.duration
-      );
-
-      oscillator.connect(gain);
-      gain.connect(context.destination);
-      oscillator.start(context.currentTime + burst.startOffset);
-      oscillator.stop(context.currentTime + burst.startOffset + burst.duration);
-    });
-
-    setSoundStatus("Sonido activo. Las alertas ahora usan 3 beeps más notorios.");
-    return true;
+      return false;
+    }
   }
 
   function triggerHaptics() {
@@ -244,17 +271,17 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     triggerHaptics();
 
     if (soundEnabled) {
-      await playBeep();
+      await playAlertSound();
     } else {
       setSoundStatus(
-        "Llegó un evento nuevo. Activá sonido para escuchar el beep en este dispositivo."
+        "Llegó un evento nuevo. Activá sonido para escuchar la alerta en este dispositivo."
       );
     }
   }
 
   async function enableSound() {
     triggerHaptics();
-    const unlocked = await playBeep();
+    const unlocked = await playAlertSound();
     if (unlocked) {
       window.localStorage.setItem(SOUND_KEY, "true");
       setSoundEnabled(true);
@@ -351,7 +378,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
               className="button-secondary gap-2"
               onClick={async () => {
                 triggerHaptics();
-                const unlocked = await playBeep();
+                const unlocked = await playAlertSound();
                 if (unlocked) {
                   window.localStorage.setItem(SOUND_KEY, "true");
                   setSoundEnabled(true);

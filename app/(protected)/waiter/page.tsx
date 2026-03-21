@@ -2,7 +2,8 @@ import { LoginForm } from "@/components/login-form";
 import { WaiterDashboard } from "@/components/waiter-dashboard";
 import { getDemoStore } from "@/lib/demo-store";
 import { getSessionProfile } from "@/lib/auth";
-import { isDemoMode } from "@/lib/runtime";
+import { hasServiceRoleEnv, isDemoMode } from "@/lib/runtime";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { EventRecord } from "@/lib/types";
 
@@ -33,7 +34,9 @@ export default async function WaiterPage() {
     );
   }
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = hasServiceRoleEnv()
+    ? createSupabaseAdminClient()
+    : await createSupabaseServerClient();
   const { data: events } = await supabase
     .from("events")
     .select("*, restaurant_tables(id, table_name, sector)")

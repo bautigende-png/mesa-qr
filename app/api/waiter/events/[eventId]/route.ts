@@ -3,7 +3,8 @@ import { z } from "zod";
 
 import { getDemoStore } from "@/lib/demo-store";
 import { requireApiRole } from "@/lib/api";
-import { isDemoMode } from "@/lib/runtime";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { hasServiceRoleEnv, isDemoMode } from "@/lib/runtime";
 
 const statusSchema = z.object({
   status: z.enum(["ACKNOWLEDGED", "RESOLVED"])
@@ -50,7 +51,8 @@ export async function PATCH(request: NextRequest, { params }: RouteProps) {
       ? { status: "ACKNOWLEDGED", acknowledged_at: new Date().toISOString() }
       : { status: "RESOLVED", resolved_at: new Date().toISOString() };
 
-  const { error } = await auth.supabase.from("events").update(payload).eq("id", eventId);
+  const supabase = hasServiceRoleEnv() ? createSupabaseAdminClient() : auth.supabase;
+  const { error } = await supabase.from("events").update(payload).eq("id", eventId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

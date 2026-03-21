@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { getDemoStore } from "@/lib/demo-store";
 import { requireApiRole } from "@/lib/api";
-import { isDemoMode } from "@/lib/runtime";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { hasServiceRoleEnv, isDemoMode } from "@/lib/runtime";
 import type { EventRecord } from "@/lib/types";
 
 export async function GET() {
@@ -17,7 +18,8 @@ export async function GET() {
     return auth.error;
   }
 
-  const { data, error } = await auth.supabase
+  const supabase = hasServiceRoleEnv() ? createSupabaseAdminClient() : auth.supabase;
+  const { data, error } = await supabase
     .from("events")
     .select("*, restaurant_tables(id, table_name, sector)")
     .neq("status", "RESOLVED")

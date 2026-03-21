@@ -3,7 +3,7 @@ import { WaiterDashboard } from "@/components/waiter-dashboard";
 import { getDemoStore } from "@/lib/demo-store";
 import { getSessionProfile } from "@/lib/auth";
 import { isDemoMode } from "@/lib/runtime";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { EventRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +33,8 @@ export default async function WaiterPage() {
     );
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data: events } = await admin
+  const supabase = await createSupabaseServerClient();
+  const { data: events } = await supabase
     .from("events")
     .select("*, restaurant_tables(id, table_name, sector)")
     .neq("status", "RESOLVED")

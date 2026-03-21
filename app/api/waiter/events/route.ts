@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { getDemoStore } from "@/lib/demo-store";
 import { requireApiRole } from "@/lib/api";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { isDemoMode } from "@/lib/runtime";
 import type { EventRecord } from "@/lib/types";
 
@@ -18,8 +17,7 @@ export async function GET() {
     return auth.error;
   }
 
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const { data, error } = await auth.supabase
     .from("events")
     .select("*, restaurant_tables(id, table_name, sector)")
     .neq("status", "RESOLVED")

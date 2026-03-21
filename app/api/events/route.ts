@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ACTION_LABELS, EVENT_COOLDOWN_MS } from "@/lib/constants";
 import { getDemoStore } from "@/lib/demo-store";
 import { isDemoMode } from "@/lib/runtime";
-import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const createEventSchema = z.object({
   tableId: z.string().uuid(),
@@ -71,65 +71,60 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const supabase = createSupabaseAdminClient();
-
-  const { data: table } = await supabase
-    .from("restaurant_tables")
-    .select("id, table_name, active")
-    .eq("id", parsed.data.tableId)
-    .eq("active", true)
-    .maybeSingle();
-
-  const cooldownThreshold = new Date(Date.now() - EVENT_COOLDOWN_MS).toISOString();
-  const { data: recentEvent } = await supabase
-    .from("events")
-    .select("id, created_at")
-    .eq("table_id", parsed.data.tableId)
-    .eq("session_id", parsed.data.sessionId)
-    .eq("action", parsed.data.action)
-    .gte("created_at", cooldownThreshold)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const typedTable = (table as { id: string; table_name: string; active: boolean } | null) ?? null;
-  const typedRecentEvent = (recentEvent as { id: string; created_at: string } | null) ?? null;
-
-  if (!typedTable) {
-    return NextResponse.json({ error: "Mesa no disponible" }, { status: 404 });
-  }
-
-  if (typedRecentEvent) {
-    const retryAfterSeconds = Math.max(
-      1,
-      Math.ceil(
-        (new Date(typedRecentEvent.created_at).getTime() + EVENT_COOLDOWN_MS - Date.now()) / 1000
-      )
-    );
-
-    return NextResponse.json(
-      {
-        error: `Ya recibimos tu pedido de ${ACTION_LABELS[parsed.data.action]}. Esperá un momento para volver a enviarlo.`,
-        retryAfterSeconds
-      },
-      { status: 429 }
-    );
-  }
-
-  const { error } = await supabase.from("events").insert({
-    table_id: parsed.data.tableId,
-    action: parsed.data.action,
-    status: "PENDING",
-    customer_email: parsed.data.customerEmail,
-    marketing_opt_in: parsed.data.marketingOptIn,
-    session_id: parsed.data.sessionId
+  const supabase = await createSupabaseServerClient();
+  const { data, error } = await supabase.rpc("create_table_event", {
+    p_action: parsed.data.action,
+    p_customer_email: parsed.data.customerEmail,
+    p_marketing_opt_in: parsed.data.marketingOptIn,
+    p_session_id: parsed.data.sessionId,
+    p_table_id: parsed.data.tableId
   });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const result =
+    (
+      (Array.isArray(data) ? data[0] : data) as
+        | {
+            ok: boolean;
+            message: string | null;
+            error_code: string | null;
+            retry_after_seconds: number | null;
+            table_name: string | null;
+          }
+        | null
+    ) ?? null;
+
+  if (!result) {
+    return NextResponse.json({ error: "No se pudo crear el evento" }, { status: 500 });
+  }
+
+  if (!result.ok) {
+    if (result.error_code === "TABLE_NOT_FOUND") {
+      return NextResponse.json({ error: "Mesa no disponible" }, { status: 404 });
+    }
+
+    if (result.error_code === "COOLDOWN") {
+      return NextResponse.json(
+        {
+          error: result.message ?? `Ya recibimos tu pedido de ${ACTION_LABELS[parsed.data.action]}. Esperá un momento para volver a enviarlo.`,
+          retryAfterSeconds: result.retry_after_seconds ?? Math.ceil(EVENT_COOLDOWN_MS / 1000)
+        },
+        { status: 429 }
+      );
+    }
+
+    return NextResponse.json(
+      { error: result.message ?? "No se pudo crear el evento" },
+      { status: 400 }
+    );
+  }
+
   return NextResponse.json({
-    message: `${ACTION_LABELS[parsed.data.action]} enviado para ${typedTable.table_name}.`
+    message:
+      result.message ??
+      `${ACTION_LABELS[parsed.data.action]} enviado para ${result.table_name ?? "la mesa"}.`
   });
 }

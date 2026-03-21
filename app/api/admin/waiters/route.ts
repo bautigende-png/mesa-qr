@@ -18,13 +18,6 @@ export async function GET() {
     return NextResponse.json({ waiters: getDemoStore().waiters });
   }
 
-  if (!hasServiceRoleEnv()) {
-    return NextResponse.json(
-      { error: "Falta SUPABASE_SERVICE_ROLE_KEY para crear usuarios mozo." },
-      { status: 503 }
-    );
-  }
-
   const auth = await requireApiRole(["ADMIN"]);
   if ("error" in auth) {
     return auth.error;
@@ -65,6 +58,13 @@ export async function POST(request: NextRequest) {
   const auth = await requireApiRole(["ADMIN"]);
   if ("error" in auth) {
     return auth.error;
+  }
+
+  if (!hasServiceRoleEnv()) {
+    return NextResponse.json(
+      { error: "Falta SUPABASE_SERVICE_ROLE_KEY para crear usuarios mozo." },
+      { status: 503 }
+    );
   }
 
   const admin = createSupabaseAdminClient();

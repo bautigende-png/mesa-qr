@@ -115,13 +115,16 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   );
   const titleFlashRef = useRef<number | null>(null);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
+  const soundEnabledRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    setSoundEnabled(window.localStorage.getItem(SOUND_KEY) === "true");
+    const enabled = window.localStorage.getItem(SOUND_KEY) === "true";
+    setSoundEnabled(enabled);
+    soundEnabledRef.current = enabled;
 
     const audio = new Audio(createAlertSoundDataUri());
     audio.preload = "auto";
@@ -139,6 +142,10 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       }
     };
   }, []);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
 
   useEffect(() => {
     const fetchLatest = async () => {
@@ -211,7 +218,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     setEvents(nextEvents);
 
     if (newIds.length > 0 || pendingCountIncreased) {
-      void triggerAlertFeedback();
+      void triggerAlertFeedback(soundEnabledRef.current);
       setLastAlertDebug(
         `Ultima alerta: ${new Date().toLocaleTimeString("es-AR")} · nuevos pendientes ${Math.max(newIds.length, nextPendingIds.size - previousPendingIds.current.size)}`
       );
@@ -266,11 +273,11 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     }, TITLE_FLASH_MS);
   }
 
-  async function triggerAlertFeedback() {
+  async function triggerAlertFeedback(isSoundEnabled: boolean) {
     flashTitle();
     triggerHaptics();
 
-    if (soundEnabled) {
+    if (isSoundEnabled) {
       await playAlertSound();
     } else {
       setSoundStatus(

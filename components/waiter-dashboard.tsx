@@ -43,9 +43,15 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   const [soundStatus, setSoundStatus] = useState(
     "Activá el sonido con un toque para asegurar alertas en iPhone y Safari."
   );
+  const [lastAlertDebug, setLastAlertDebug] = useState("Sin alertas nuevas todavía.");
   const previousIds = useRef(new Set(initialEvents.map((event) => event.id)));
   const previousPendingIds = useRef(
     new Set(initialEvents.filter((event) => event.status === "PENDING").map((event) => event.id))
+  );
+  const latestSeenPendingCreatedAt = useRef(
+    initialEvents
+      .filter((event) => event.status === "PENDING")
+      .reduce((latest, event) => (event.created_at > latest ? event.created_at : latest), "")
   );
   const audioContextRef = useRef<AudioContextLike | null>(null);
   const titleFlashRef = useRef<number | null>(null);
@@ -120,18 +126,29 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     const nextPendingIds = new Set(
       nextEvents.filter((event) => event.status === "PENDING").map((event) => event.id)
     );
+    const newestPendingCreatedAt = nextEvents
+      .filter((event) => event.status === "PENDING")
+      .reduce((latest, event) => (event.created_at > latest ? event.created_at : latest), "");
+
     const newIds = nextEvents
+      .filter((event) => event.status === "PENDING")
       .filter(
         (event) =>
-          event.status === "PENDING" &&
-          (!previousIds.current.has(event.id) || !previousPendingIds.current.has(event.id))
+          !previousIds.current.has(event.id) ||
+          !previousPendingIds.current.has(event.id) ||
+          event.created_at > latestSeenPendingCreatedAt.current
       )
       .map((event) => event.id);
 
+    const pendingCountIncreased = nextPendingIds.size > previousPendingIds.current.size;
+
     setEvents(nextEvents);
 
-    if (newIds.length > 0) {
+    if (newIds.length > 0 || pendingCountIncreased) {
       void triggerAlertFeedback();
+      setLastAlertDebug(
+        `Ultima alerta: ${new Date().toLocaleTimeString("es-AR")} · nuevos pendientes ${Math.max(newIds.length, nextPendingIds.size - previousPendingIds.current.size)}`
+      );
 
       setHighlightedIds((current) => Array.from(new Set([...newIds, ...current])));
       window.setTimeout(() => {
@@ -141,6 +158,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
 
     previousIds.current = new Set(nextEvents.map((event) => event.id));
     previousPendingIds.current = nextPendingIds;
+    latestSeenPendingCreatedAt.current = newestPendingCreatedAt;
   }
 
   async function ensureAudioContext() {
@@ -313,6 +331,9 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Sonido de alertas</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">{soundStatus}</p>
+            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
+              {lastAlertDebug}
+            </p>
           </div>
           <div className="flex flex-wrap gap-2">
             {!soundEnabled ? (

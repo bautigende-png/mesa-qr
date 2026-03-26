@@ -28,6 +28,12 @@ interface WaiterDashboardProps {
 const SOUND_KEY = "mesa-lista.waiter-sound-enabled";
 const ALERT_VIBRATION_PATTERN = [250, 100, 250, 100, 350];
 const TITLE_FLASH_MS = 1200;
+const PENDING_REMINDER_MS = 30_000;
+const ACKNOWLEDGED_REMINDER_MS = 60_000;
+
+function supportsRepeatingAlert(action: EventRecord["action"]) {
+  return action === "CALL_WAITER" || action === "REQUEST_BILL";
+}
 
 function createAlertSoundDataUri() {
   const sampleRate = 22_050;
@@ -116,6 +122,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   const titleFlashRef = useRef<number | null>(null);
   const alertAudioRef = useRef<HTMLAudioElement | null>(null);
   const soundEnabledRef = useRef(false);
+  const reminderSlotsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -146,6 +153,58 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const now = Date.now();
+
+      for (const event of events) {
+        if (!supportsRepeatingAlert(event.action)) {
+          continue;
+        }
+
+        if (event.status === "PENDING") {
+          const elapsed = now - new Date(event.created_at).getTime();
+          const slot = Math.floor(elapsed / PENDING_REMINDER_MS);
+          const key = `${event.id}:PENDING`;
+
+          if (slot >= 1 && slot > (reminderSlotsRef.current[key] ?? 0)) {
+            reminderSlotsRef.current[key] = slot;
+            void triggerAlertFeedback(soundEnabledRef.current);
+            setLastAlertDebug(
+              `Recordatorio: ${ACTION_LABELS[event.action]} en ${event.restaurant_tables?.table_name ?? "Mesa"} sigue pendiente.`
+            );
+            setHighlightedIds((current) => Array.from(new Set([event.id, ...current])));
+            window.setTimeout(() => {
+              setHighlightedIds((current) => current.filter((id) => id !== event.id));
+            }, 7000);
+            break;
+          }
+        }
+
+        if (event.status === "ACKNOWLEDGED" && event.acknowledged_at) {
+          const elapsed = now - new Date(event.acknowledged_at).getTime();
+          const slot = Math.floor(elapsed / ACKNOWLEDGED_REMINDER_MS);
+          const key = `${event.id}:ACKNOWLEDGED`;
+
+          if (slot >= 1 && slot > (reminderSlotsRef.current[key] ?? 0)) {
+            reminderSlotsRef.current[key] = slot;
+            void triggerAlertFeedback(soundEnabledRef.current);
+            setLastAlertDebug(
+              `Recordatorio: ${ACTION_LABELS[event.action]} en ${event.restaurant_tables?.table_name ?? "Mesa"} fue leído pero sigue sin resolver.`
+            );
+            setHighlightedIds((current) => Array.from(new Set([event.id, ...current])));
+            window.setTimeout(() => {
+              setHighlightedIds((current) => current.filter((id) => id !== event.id));
+            }, 7000);
+            break;
+          }
+        }
+      }
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [events]);
 
   useEffect(() => {
     const fetchLatest = async () => {
@@ -198,6 +257,12 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
   }
 
   function mergeIncoming(nextEvents: EventRecord[]) {
+    reminderSlotsRef.current = Object.fromEntries(
+      Object.entries(reminderSlotsRef.current).filter(([key]) =>
+        nextEvents.some((event) => key.startsWith(`${event.id}:`) && event.status !== "RESOLVED")
+      )
+    );
+
     const pendingEvents = nextEvents.filter((event) => event.status === "PENDING");
     const nextPendingIds = new Set(pendingEvents.map((event) => event.id));
     const newestPendingCreatedAt = pendingEvents.reduce(
@@ -333,7 +398,9 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     router.refresh();
   }
 
-  const pendingCount = events.filter((event) => event.status === "PENDING").length;
+  const pendingCount = events.filter(
+    (event) => event.status === "PENDING" && event.action !== "VIEW_MENU"
+  ).length;
 
   return (
     <main className="shell space-y-5">
@@ -367,6 +434,9 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
             <p className="mt-1 text-sm leading-6 text-slate-600">{soundStatus}</p>
             <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-400">
               {lastAlertDebug}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">
+              Re-alerta cada 30s si sigue pendiente y cada 60s si fue leído pero no resuelto.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -414,6 +484,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
           const highlighted = highlightedIds.includes(event.id);
           const busyAck = pendingActionId === `${event.id}ACKNOWLEDGED`;
           const busyResolve = pendingActionId === `${event.id}RESOLVED`;
+          const isArrivalEvent = event.action === "VIEW_MENU";
 
           return (
             <article
@@ -459,7 +530,9 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
                   <div className="flex flex-wrap gap-2">
                     <button
                       className="button-secondary gap-2"
-                      disabled={event.status !== "PENDING" || busyAck || busyResolve}
+                      disabled={
+                        isArrivalEvent || event.status !== "PENDING" || busyAck || busyResolve
+                      }
                       onClick={() => updateStatus(event.id, "ACKNOWLEDGED")}
                     >
                       {busyAck ? (
@@ -479,7 +552,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
                       ) : (
                         <CheckCheck className="h-4 w-4" />
                       )}
-                      RESOLVED
+                      {isArrivalEvent ? "VISTO" : "RESOLVED"}
                     </button>
                   </div>
                 </div>

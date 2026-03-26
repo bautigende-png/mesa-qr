@@ -1,6 +1,6 @@
 export type Role = "ADMIN" | "WAITER";
 
-export type EventAction = "CALL_WAITER" | "REQUEST_BILL";
+export type EventAction = "CALL_WAITER" | "REQUEST_BILL" | "VIEW_MENU";
 export type EventStatus = "PENDING" | "ACKNOWLEDGED" | "RESOLVED";
 
 export interface Profile {
@@ -58,6 +58,7 @@ export interface AdminMetricsSummary {
   pending_events: number;
   waiter_calls: number;
   bill_requests: number;
+  menu_views: number;
   avg_minutes_to_acknowledge: number | null;
   avg_minutes_to_resolve: number | null;
   marketing_opt_in_rate: number;
@@ -69,6 +70,7 @@ export interface AdminMetricsDailyPoint {
   total_events: number;
   waiter_calls: number;
   bill_requests: number;
+  menu_views: number;
 }
 
 export interface AdminMetricsTopTable {
@@ -77,6 +79,7 @@ export interface AdminMetricsTopTable {
   total_events: number;
   waiter_calls: number;
   bill_requests: number;
+  menu_views: number;
 }
 
 export interface AdminMetricsSector {

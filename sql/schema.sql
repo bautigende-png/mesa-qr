@@ -7,11 +7,23 @@ begin
   end if;
 
   if not exists (select 1 from pg_type where typname = 'event_action') then
-    create type public.event_action as enum ('CALL_WAITER', 'REQUEST_BILL');
+    create type public.event_action as enum ('CALL_WAITER', 'REQUEST_BILL', 'VIEW_MENU');
   end if;
 
   if not exists (select 1 from pg_type where typname = 'event_status') then
     create type public.event_status as enum ('PENDING', 'ACKNOWLEDGED', 'RESOLVED');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_enum
+    where enumtypid = 'public.event_action'::regtype
+      and enumlabel = 'VIEW_MENU'
+  ) then
+    alter type public.event_action add value 'VIEW_MENU';
   end if;
 end $$;
 
@@ -196,6 +208,7 @@ begin
         case p_action
           when 'CALL_WAITER'::public.event_action then 'Llamar al mozo'
           when 'REQUEST_BILL'::public.event_action then 'Pedir la cuenta'
+          when 'VIEW_MENU'::public.event_action then 'Cliente viendo menú'
         end
       ),
       'COOLDOWN',
@@ -237,6 +250,7 @@ begin
       case p_action
         when 'CALL_WAITER'::public.event_action then 'Llamar al mozo'
         when 'REQUEST_BILL'::public.event_action then 'Pedir la cuenta'
+        when 'VIEW_MENU'::public.event_action then 'Cliente viendo menú'
       end,
       active_table.table_name
     ),

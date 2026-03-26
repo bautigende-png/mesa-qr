@@ -97,6 +97,24 @@ function seedStore(): DemoStore {
           table_name: "Mesa 1",
           sector: "Salon"
         }
+      },
+      {
+        id: "11111111-1111-1111-1111-111111111114",
+        table_id: "11111111-1111-1111-1111-111111111111",
+        action: "VIEW_MENU",
+        status: "RESOLVED",
+        customer_email: "menu@demo.com",
+        marketing_opt_in: false,
+        session_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+        created_at: new Date(now - 90 * 1000).toISOString(),
+        updated_at: new Date(now - 60 * 1000).toISOString(),
+        acknowledged_at: new Date(now - 75 * 1000).toISOString(),
+        resolved_at: new Date(now - 60 * 1000).toISOString(),
+        restaurant_tables: {
+          id: "11111111-1111-1111-1111-111111111111",
+          table_name: "Mesa 1",
+          sector: "Salon"
+        }
       }
     ]
   };

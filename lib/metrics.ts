@@ -26,7 +26,8 @@ export function computeAdminMetrics(events: EventRecord[]): AdminMetrics {
       label: date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }),
       total_events: 0,
       waiter_calls: 0,
-      bill_requests: 0
+      bill_requests: 0,
+      menu_views: 0
     });
   }
 
@@ -43,8 +44,10 @@ export function computeAdminMetrics(events: EventRecord[]): AdminMetrics {
       day.total_events += 1;
       if (event.action === "CALL_WAITER") {
         day.waiter_calls += 1;
-      } else {
+      } else if (event.action === "REQUEST_BILL") {
         day.bill_requests += 1;
+      } else {
+        day.menu_views += 1;
       }
     }
 
@@ -55,13 +58,16 @@ export function computeAdminMetrics(events: EventRecord[]): AdminMetrics {
       table_name: tableName,
       total_events: 0,
       waiter_calls: 0,
-      bill_requests: 0
+      bill_requests: 0,
+      menu_views: 0
     };
     currentTable.total_events += 1;
     if (event.action === "CALL_WAITER") {
       currentTable.waiter_calls += 1;
-    } else {
+    } else if (event.action === "REQUEST_BILL") {
       currentTable.bill_requests += 1;
+    } else {
+      currentTable.menu_views += 1;
     }
     tableMap.set(tableId, currentTable);
 
@@ -92,6 +98,7 @@ export function computeAdminMetrics(events: EventRecord[]): AdminMetrics {
       pending_events: events.filter((event) => event.status === "PENDING").length,
       waiter_calls: events.filter((event) => event.action === "CALL_WAITER").length,
       bill_requests: events.filter((event) => event.action === "REQUEST_BILL").length,
+      menu_views: events.filter((event) => event.action === "VIEW_MENU").length,
       avg_minutes_to_acknowledge: ackCount ? roundTo(totalAckMinutes / ackCount) : null,
       avg_minutes_to_resolve: resolveCount ? roundTo(totalResolveMinutes / resolveCount) : null,
       marketing_opt_in_rate: events.length ? roundTo((marketingOptIns / events.length) * 100, 1) ?? 0 : 0

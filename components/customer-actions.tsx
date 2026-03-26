@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { ACTION_LABELS, EVENT_COOLDOWN_MS } from "@/lib/constants";
+import { getReadableTextColor, mixHex, toRgba } from "@/lib/color-theme";
 import type { EventAction } from "@/lib/types";
 
 const SESSION_KEY = "mesa-lista.session-id";
@@ -62,8 +63,22 @@ export function CustomerActions({
   const [sessionId, setSessionId] = useState("");
   const [cooldowns, setCooldowns] = useState<Record<EventAction, number>>({
     CALL_WAITER: 0,
-    REQUEST_BILL: 0
+    REQUEST_BILL: 0,
+    VIEW_MENU: 0
   });
+
+  const heroBlend = mixHex(primaryColor, secondaryColor, 0.5);
+  const heroTextColor = getReadableTextColor(heroBlend);
+  const heroMutedTextColor = toRgba(heroTextColor, heroTextColor === "#ffffff" ? 0.78 : 0.72);
+  const heroCardBackground = toRgba(heroTextColor === "#ffffff" ? "#ffffff" : primaryColor, 0.1);
+  const primaryButtonTextColor = getReadableTextColor(primaryColor);
+  const directButtonBackground = primaryColor;
+  const menuButtonBackground = mixHex(primaryColor, tertiaryColor, 0.84);
+  const menuButtonTextColor = getReadableTextColor(menuButtonBackground);
+  const billButtonBackground = mixHex(secondaryColor, tertiaryColor, 0.82);
+  const billButtonTextColor = getReadableTextColor(billButtonBackground);
+  const customMessageBackground = mixHex(tertiaryColor, "#ffffff", 0.28);
+  const customMessageTextColor = getReadableTextColor(customMessageBackground);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -112,20 +127,22 @@ export function CustomerActions({
 
     setCooldowns({
       CALL_WAITER: readCooldown("CALL_WAITER"),
-      REQUEST_BILL: readCooldown("REQUEST_BILL")
+      REQUEST_BILL: readCooldown("REQUEST_BILL"),
+      VIEW_MENU: readCooldown("VIEW_MENU")
     });
 
     const interval = window.setInterval(() => {
       setCooldowns((current) => ({
         CALL_WAITER: current.CALL_WAITER > Date.now() ? current.CALL_WAITER : 0,
-        REQUEST_BILL: current.REQUEST_BILL > Date.now() ? current.REQUEST_BILL : 0
+        REQUEST_BILL: current.REQUEST_BILL > Date.now() ? current.REQUEST_BILL : 0,
+        VIEW_MENU: current.VIEW_MENU > Date.now() ? current.VIEW_MENU : 0
       }));
     }, 1000);
 
     return () => window.clearInterval(interval);
   }, [sessionId, tableId]);
 
-  async function submitAction(action: EventAction) {
+  function validateSessionForAction() {
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -133,7 +150,7 @@ export function CustomerActions({
         kind: "error",
         message: "Ingresá un email válido antes de enviar el aviso."
       });
-      return;
+      return null;
     }
 
     if (!sessionId) {
@@ -141,7 +158,7 @@ export function CustomerActions({
         kind: "error",
         message: "No pudimos preparar tu sesión. Recargá la página e intentá otra vez."
       });
-      return;
+      return null;
     }
 
     if (!isOnline) {
@@ -149,19 +166,36 @@ export function CustomerActions({
         kind: "error",
         message: "Parece que no hay conexión. Revisá internet y probá de nuevo."
       });
-      return;
+      return null;
+    }
+
+    return normalizedEmail;
+  }
+
+  async function submitAction(
+    action: EventAction,
+    options?: { silent?: boolean; successMessage?: string }
+  ) {
+    const normalizedEmail = validateSessionForAction();
+
+    if (!normalizedEmail) {
+      return false;
     }
 
     if (cooldowns[action] > Date.now()) {
-      setFeedback({
-        kind: "error",
-        message: `Esperá ${Math.ceil((cooldowns[action] - Date.now()) / 1000)}s antes de volver a enviar esta acción.`
-      });
-      return;
+      if (!options?.silent) {
+        setFeedback({
+          kind: "error",
+          message: `Esperá ${Math.ceil((cooldowns[action] - Date.now()) / 1000)}s antes de volver a enviar esta acción.`
+        });
+      }
+      return false;
     }
 
-    setLoadingAction(action);
-    setFeedback({ kind: "idle", message: "Enviando aviso al salón..." });
+    if (!options?.silent) {
+      setLoadingAction(action);
+      setFeedback({ kind: "idle", message: "Enviando aviso al salón..." });
+    }
 
     const response = await fetch("/api/events", {
       method: "POST",
@@ -190,8 +224,10 @@ export function CustomerActions({
         kind: "error",
         message: payload?.error ?? `No se pudo crear el evento.${retryAfter}`
       });
-      setLoadingAction(null);
-      return;
+      if (!options?.silent) {
+        setLoadingAction(null);
+      }
+      return false;
     }
 
     window.localStorage.setItem(EMAIL_KEY, normalizedEmail);
@@ -201,13 +237,60 @@ export function CustomerActions({
       String(cooldownUntil)
     );
     setCooldowns((current) => ({ ...current, [action]: cooldownUntil }));
-    setFeedback({
-      kind: "success",
-      message:
-        payload?.message ??
-        `${ACTION_LABELS[action]} enviado. El equipo ya recibió el aviso.`
+    if (!options?.silent) {
+      setFeedback({
+        kind: "success",
+        message:
+          options?.successMessage ??
+          payload?.message ??
+          `${ACTION_LABELS[action]} enviado. El equipo ya recibió el aviso.`
+      });
+      setLoadingAction(null);
+    }
+
+    return true;
+  }
+
+  function handleExternalExperience(url: string | null, sourceLabel: "Pedí directo" | "Ver menú") {
+    if (!url) {
+      setFeedback({
+        kind: "error",
+        message:
+          sourceLabel === "Pedí directo"
+            ? "Esta mesa todavía no tiene link de pedido configurado."
+            : "Falta configurar el link del menú para esta marca."
+      });
+      return;
+    }
+
+    const normalizedEmail = validateSessionForAction();
+    if (!normalizedEmail) {
+      return;
+    }
+
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = url;
+    }
+
+    const shouldNotifyArrival = cooldowns.VIEW_MENU <= Date.now();
+    if (!shouldNotifyArrival) {
+      return;
+    }
+
+    void submitAction("VIEW_MENU", {
+      silent: true,
+      successMessage: `${sourceLabel} abierto y mesa avisada al salón.`
+    }).then((sent) => {
+      if (!sent) {
+        return;
+      }
+
+      setFeedback({
+        kind: "success",
+        message: `${sourceLabel} abierto y mesa avisada al salón.`
+      });
     });
-    setLoadingAction(null);
   }
 
   return (
@@ -220,39 +303,61 @@ export function CustomerActions({
       <div className="mx-auto max-w-lg space-y-4">
         <section className="overflow-hidden rounded-[32px] border border-white/80 bg-white/92 shadow-soft backdrop-blur">
           <div
-            className="px-5 pb-6 pt-5 text-white sm:px-8"
+            className="px-5 pb-6 pt-5 sm:px-8"
             style={{
-              background: `linear-gradient(140deg, ${primaryColor} 0%, ${secondaryColor} 100%)`
+              background: `linear-gradient(140deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+              color: heroTextColor
             }}
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.28em] text-white/70">
+                <div className="text-xs uppercase tracking-[0.28em]" style={{ color: heroMutedTextColor }}>
                   {restaurantName}
                 </div>
                 <h1 className="mt-2 text-4xl font-semibold tracking-tight">{tableName}</h1>
               </div>
               {logoUrl ? (
-                <div className="h-14 w-14 overflow-hidden rounded-[20px] border border-white/20 bg-white/10">
+                <div
+                  className="h-14 w-14 overflow-hidden rounded-[20px] border"
+                  style={{
+                    borderColor: toRgba(heroTextColor, 0.22),
+                    backgroundColor: heroCardBackground
+                  }}
+                >
                   <img alt={`${restaurantName} logo`} className="h-full w-full object-cover" src={logoUrl} />
                 </div>
               ) : null}
             </div>
 
-            <p className="mt-4 text-sm leading-6 text-white/80">
+            <p className="mt-4 text-sm leading-6" style={{ color: heroMutedTextColor }}>
               Interfaz pensada para celular. Abrí el menú, pedí directo o avisale al salón
               sin esperar.
             </p>
 
             {bannerUrl ? (
-              <div className="mt-5 overflow-hidden rounded-[24px] border border-white/15 bg-white/10">
+              <div
+                className="mt-5 overflow-hidden rounded-[24px] border"
+                style={{
+                  borderColor: toRgba(heroTextColor, 0.16),
+                  backgroundColor: heroCardBackground
+                }}
+              >
                 <img alt="Banner del restaurante" className="h-40 w-full object-cover" src={bannerUrl} />
                 {bannerText ? (
-                  <div className="px-4 py-3 text-sm font-medium text-white/90">{bannerText}</div>
+                  <div className="px-4 py-3 text-sm font-medium" style={{ color: heroTextColor }}>
+                    {bannerText}
+                  </div>
                 ) : null}
               </div>
             ) : bannerText ? (
-              <div className="mt-5 rounded-[24px] border border-white/15 bg-white/10 px-4 py-4 text-sm font-medium text-white/90">
+              <div
+                className="mt-5 rounded-[24px] border px-4 py-4 text-sm font-medium"
+                style={{
+                  borderColor: toRgba(heroTextColor, 0.16),
+                  backgroundColor: heroCardBackground,
+                  color: heroTextColor
+                }}
+              >
                 {bannerText}
               </div>
             ) : null}
@@ -263,9 +368,9 @@ export function CustomerActions({
               <div
                 className="rounded-[24px] border px-4 py-4 text-sm leading-6"
                 style={{
-                  backgroundColor: tertiaryColor,
-                  borderColor: `${secondaryColor}33`,
-                  color: primaryColor
+                  backgroundColor: customMessageBackground,
+                  borderColor: toRgba(secondaryColor, 0.2),
+                  color: customMessageTextColor
                 }}
               >
                 {customMessage}
@@ -276,12 +381,14 @@ export function CustomerActions({
               <a
                 className={`button-primary h-14 gap-2 rounded-[20px] text-base ${!primaryUrl ? "pointer-events-none opacity-60" : ""}`}
                 href={primaryUrl ?? undefined}
-                target="_blank"
-                rel="noreferrer"
                 aria-disabled={!primaryUrl}
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleExternalExperience(primaryUrl, "Pedí directo");
+                }}
                 style={{
-                  backgroundColor: primaryColor,
-                  color: "#ffffff"
+                  backgroundColor: directButtonBackground,
+                  color: primaryButtonTextColor
                 }}
               >
                 Pedí directo
@@ -296,12 +403,15 @@ export function CustomerActions({
               <a
                 className={`button-secondary h-14 gap-2 rounded-[20px] text-base ${!menuUrl ? "pointer-events-none opacity-60" : ""}`}
                 href={menuUrl ?? undefined}
-                target="_blank"
-                rel="noreferrer"
                 aria-disabled={!menuUrl}
+                onClick={(event) => {
+                  event.preventDefault();
+                  handleExternalExperience(menuUrl, "Ver menú");
+                }}
                 style={{
-                  borderColor: `${primaryColor}22`,
-                  color: primaryColor
+                  backgroundColor: menuButtonBackground,
+                  borderColor: toRgba(primaryColor, 0.15),
+                  color: menuButtonTextColor
                 }}
               >
                 Ver menú
@@ -360,8 +470,9 @@ export function CustomerActions({
                 disabled={loadingAction !== null || cooldowns.CALL_WAITER > Date.now()}
                 onClick={() => submitAction("CALL_WAITER")}
                 style={{
-                  borderColor: `${primaryColor}22`,
-                  color: primaryColor
+                  backgroundColor: menuButtonBackground,
+                  borderColor: toRgba(primaryColor, 0.15),
+                  color: menuButtonTextColor
                 }}
               >
                 <Bell className="h-4 w-4" />
@@ -377,8 +488,9 @@ export function CustomerActions({
                 disabled={loadingAction !== null || cooldowns.REQUEST_BILL > Date.now()}
                 onClick={() => submitAction("REQUEST_BILL")}
                 style={{
-                  borderColor: `${secondaryColor}33`,
-                  color: secondaryColor
+                  backgroundColor: billButtonBackground,
+                  borderColor: toRgba(secondaryColor, 0.2),
+                  color: billButtonTextColor
                 }}
               >
                 <ReceiptText className="h-4 w-4" />

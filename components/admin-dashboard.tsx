@@ -6,6 +6,7 @@ import { Bell, ChartColumnIncreasing, Clock3, Download, Loader2, LogOut, Plus, P
 import { useRouter } from "next/navigation";
 
 import { ACTION_LABELS, EVENT_STATUSES, STATUS_LABELS } from "@/lib/constants";
+import { getReadableTextColor, mixHex, toRgba } from "@/lib/color-theme";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 import { AdminMetrics, EventRecord, Profile, RestaurantTable, Settings } from "@/lib/types";
 import { formatElapsed, getBaseUrl } from "@/lib/utils";
@@ -67,6 +68,13 @@ export function AdminDashboard({
     email: "",
     password: ""
   });
+  const previewHeroBlend = mixHex(settings.brand_primary_color, settings.brand_secondary_color, 0.5);
+  const previewHeroText = getReadableTextColor(previewHeroBlend);
+  const previewHeroMuted = toRgba(previewHeroText, previewHeroText === "#ffffff" ? 0.78 : 0.72);
+  const previewSoftMessage = mixHex(settings.brand_tertiary_color, "#ffffff", 0.28);
+  const previewPrimaryButtonText = getReadableTextColor(settings.brand_primary_color);
+  const previewMenuButtonBackground = mixHex(settings.brand_primary_color, settings.brand_tertiary_color, 0.84);
+  const previewMenuButtonText = getReadableTextColor(previewMenuButtonBackground);
 
   async function handleLogout() {
     if (!supabase) {
@@ -503,14 +511,18 @@ export function AdminDashboard({
                   }}
                 >
                   <div
-                    className="px-4 pb-4 pt-4 text-white"
+                    className="px-4 pb-4 pt-4"
                     style={{
-                      background: `linear-gradient(140deg, ${settings.brand_primary_color} 0%, ${settings.brand_secondary_color} 100%)`
+                      background: `linear-gradient(140deg, ${settings.brand_primary_color} 0%, ${settings.brand_secondary_color} 100%)`,
+                      color: previewHeroText
                     }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-[11px] uppercase tracking-[0.22em] text-white/70">
+                        <div
+                          className="text-[11px] uppercase tracking-[0.22em]"
+                          style={{ color: previewHeroMuted }}
+                        >
                           {settings.restaurant_name}
                         </div>
                         <div className="mt-2 text-2xl font-semibold">Mesa 12</div>
@@ -531,7 +543,9 @@ export function AdminDashboard({
                       />
                     ) : null}
                     {settings.mobile_banner_text ? (
-                      <div className="mt-3 text-sm text-white/90">{settings.mobile_banner_text}</div>
+                      <div className="mt-3 text-sm" style={{ color: previewHeroMuted }}>
+                        {settings.mobile_banner_text}
+                      </div>
                     ) : null}
                   </div>
                   <div className="space-y-3 p-4">
@@ -539,24 +553,28 @@ export function AdminDashboard({
                       <div
                         className="rounded-[18px] px-3 py-3 text-sm"
                         style={{
-                          backgroundColor: settings.brand_tertiary_color,
-                          color: settings.brand_primary_color
+                          backgroundColor: previewSoftMessage,
+                          color: getReadableTextColor(previewSoftMessage)
                         }}
                       >
                         {settings.custom_message}
                       </div>
                     ) : null}
                     <div
-                      className="rounded-[18px] px-4 py-3 text-center text-sm font-semibold text-white"
-                      style={{ backgroundColor: settings.brand_primary_color }}
+                      className="rounded-[18px] px-4 py-3 text-center text-sm font-semibold"
+                      style={{
+                        backgroundColor: settings.brand_primary_color,
+                        color: previewPrimaryButtonText
+                      }}
                     >
                       Pedí directo
                     </div>
                     <div
                       className="rounded-[18px] border px-4 py-3 text-center text-sm font-semibold"
                       style={{
-                        borderColor: `${settings.brand_primary_color}22`,
-                        color: settings.brand_primary_color
+                        backgroundColor: previewMenuButtonBackground,
+                        borderColor: toRgba(settings.brand_primary_color, 0.15),
+                        color: previewMenuButtonText
                       }}
                     >
                       Ver menú
@@ -809,7 +827,7 @@ export function AdminDashboard({
           </button>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           {[
             {
               label: "Eventos totales",
@@ -825,6 +843,11 @@ export function AdminDashboard({
               label: "Pedidos de cuenta",
               value: metrics.summary.bill_requests,
               icon: ReceiptText
+            },
+            {
+              label: "Mesas viendo menú",
+              value: metrics.summary.menu_views,
+              icon: QrCode
             },
             {
               label: "Pendientes",
@@ -872,7 +895,7 @@ export function AdminDashboard({
                       <div className="h-full rounded-full bg-slate-900" style={{ width }} />
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {point.waiter_calls} mozo · {point.bill_requests} cuenta
+                      {point.waiter_calls} mozo · {point.bill_requests} cuenta · {point.menu_views} menú
                     </div>
                   </div>
                 );
@@ -925,7 +948,7 @@ export function AdminDashboard({
                     <div>
                       <div className="font-semibold text-slate-900">{table.table_name}</div>
                       <div className="mt-1 text-sm text-slate-600">
-                        {table.waiter_calls} mozo · {table.bill_requests} cuenta
+                        {table.waiter_calls} mozo · {table.bill_requests} cuenta · {table.menu_views} menú
                       </div>
                     </div>
                     <div className="text-2xl font-semibold text-slate-900">

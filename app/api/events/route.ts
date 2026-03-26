@@ -9,7 +9,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 const createEventSchema = z.object({
   tableId: z.string().uuid(),
   sessionId: z.string().uuid(),
-  action: z.enum(["CALL_WAITER", "REQUEST_BILL"]),
+  action: z.enum(["CALL_WAITER", "REQUEST_BILL", "VIEW_MENU"]),
   customerEmail: z.string().email(),
   marketingOptIn: z.boolean().optional().default(false)
 });

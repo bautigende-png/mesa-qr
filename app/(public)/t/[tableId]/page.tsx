@@ -29,7 +29,7 @@ export default async function TablePage({ params }: TablePageProps) {
         tableId={table.id}
         tableName={table.table_name}
         restaurantName={`${demo.settings.restaurant_name} - Demo`}
-        primaryUrl={safeUrl(table.ordering_url) ?? safeUrl(demo.settings.direct_order_url)}
+        primaryUrl={safeUrl(demo.settings.direct_order_url) ?? safeUrl(table.ordering_url)}
         menuUrl={safeUrl(table.menu_url_override) ?? safeUrl(demo.settings.global_menu_url)}
         logoUrl={safeUrl(demo.settings.logo_url)}
         bannerUrl={safeUrl(demo.settings.mobile_banner_url)}
@@ -61,17 +61,12 @@ export default async function TablePage({ params }: TablePageProps) {
     notFound();
   }
 
-  const primaryUrl =
-    safeUrl(typedTable.ordering_url) ??
-    safeUrl(typedTable.menu_url_override) ??
-    safeUrl(typedSettings.global_menu_url);
-
   return (
     <CustomerActions
       tableId={typedTable.id}
       tableName={typedTable.table_name}
       restaurantName={typedSettings.restaurant_name}
-      primaryUrl={safeUrl(typedTable.ordering_url) ?? safeUrl(typedSettings.direct_order_url)}
+      primaryUrl={safeUrl(typedSettings.direct_order_url) ?? safeUrl(typedTable.ordering_url)}
       menuUrl={safeUrl(typedTable.menu_url_override) ?? safeUrl(typedSettings.global_menu_url)}
       logoUrl={safeUrl(typedSettings.logo_url)}
       bannerUrl={safeUrl(typedSettings.mobile_banner_url)}

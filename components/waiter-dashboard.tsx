@@ -35,17 +35,20 @@ function supportsRepeatingAlert(action: EventRecord["action"]) {
   return action === "CALL_WAITER" || action === "REQUEST_BILL";
 }
 
-function createAlertSoundDataUri() {
+function createAlertSoundDataUri(variant: "full" | "soft" = "full") {
   const sampleRate = 22_050;
-  const durationSeconds = 1.1;
+  const durationSeconds = variant === "soft" ? 0.38 : 1.1;
   const totalSamples = Math.floor(sampleRate * durationSeconds);
   const samples = new Int16Array(totalSamples);
 
-  const beeps = [
-    { start: 0.0, duration: 0.18, frequency: 880, volume: 0.88 },
-    { start: 0.28, duration: 0.18, frequency: 880, volume: 0.88 },
-    { start: 0.56, duration: 0.24, frequency: 960, volume: 0.98 }
-  ];
+  const beeps =
+    variant === "soft"
+      ? [{ start: 0.0, duration: 0.2, frequency: 920, volume: 0.78 }]
+      : [
+          { start: 0.0, duration: 0.18, frequency: 880, volume: 0.88 },
+          { start: 0.28, duration: 0.18, frequency: 880, volume: 0.88 },
+          { start: 0.56, duration: 0.24, frequency: 960, volume: 0.98 }
+        ];
 
   for (let i = 0; i < totalSamples; i += 1) {
     const t = i / sampleRate;
@@ -120,7 +123,10 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       .reduce((latest, event) => (event.created_at > latest ? event.created_at : latest), "")
   );
   const titleFlashRef = useRef<number | null>(null);
-  const alertAudioRef = useRef<HTMLAudioElement | null>(null);
+  const alertAudioRef = useRef<Record<"full" | "soft", HTMLAudioElement | null>>({
+    full: null,
+    soft: null
+  });
   const soundEnabledRef = useRef(false);
   const reminderSlotsRef = useRef<Record<string, number>>({});
 
@@ -133,20 +139,27 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     setSoundEnabled(enabled);
     soundEnabledRef.current = enabled;
 
-    const audio = new Audio(createAlertSoundDataUri());
-    audio.preload = "auto";
-    audio.setAttribute("playsinline", "true");
-    alertAudioRef.current = audio;
+    const fullAudio = new Audio(createAlertSoundDataUri("full"));
+    fullAudio.preload = "auto";
+    fullAudio.setAttribute("playsinline", "true");
+
+    const softAudio = new Audio(createAlertSoundDataUri("soft"));
+    softAudio.preload = "auto";
+    softAudio.setAttribute("playsinline", "true");
+
+    alertAudioRef.current = {
+      full: fullAudio,
+      soft: softAudio
+    };
 
     return () => {
       if (titleFlashRef.current) {
         window.clearTimeout(titleFlashRef.current);
       }
       document.title = "Mesa Lista";
-      if (alertAudioRef.current) {
-        alertAudioRef.current.pause();
-        alertAudioRef.current = null;
-      }
+      alertAudioRef.current.full?.pause();
+      alertAudioRef.current.soft?.pause();
+      alertAudioRef.current = { full: null, soft: null };
     };
   }, []);
 
@@ -283,7 +296,12 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     setEvents(nextEvents);
 
     if (newIds.length > 0 || pendingCountIncreased) {
-      void triggerAlertFeedback(soundEnabledRef.current);
+      const nextNewEvents = nextEvents.filter((event) => newIds.includes(event.id));
+      const variant =
+        nextNewEvents.length > 0 && nextNewEvents.every((event) => event.action === "VIEW_MENU")
+          ? "soft"
+          : "full";
+      void triggerAlertFeedback(soundEnabledRef.current, variant);
       setLastAlertDebug(
         `Ultima alerta: ${new Date().toLocaleTimeString("es-AR")} · nuevos pendientes ${Math.max(newIds.length, nextPendingIds.size - previousPendingIds.current.size)}`
       );
@@ -299,8 +317,8 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     latestSeenPendingCreatedAt.current = newestPendingCreatedAt;
   }
 
-  async function playAlertSound() {
-    const audio = alertAudioRef.current;
+  async function playAlertSound(variant: "full" | "soft" = "full") {
+    const audio = alertAudioRef.current[variant];
 
     if (!audio) {
       setSoundStatus("No pudimos preparar el audio de alertas en este dispositivo.");
@@ -311,7 +329,11 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       audio.pause();
       audio.currentTime = 0;
       await audio.play();
-      setSoundStatus("Sonido activo. Las alertas usan 3 beeps fuertes.");
+      setSoundStatus(
+        variant === "soft"
+          ? "Sonido activo. Las alertas de llegada usan un solo pip."
+          : "Sonido activo. Las alertas usan 3 beeps fuertes."
+      );
       return true;
     } catch {
       setSoundStatus(
@@ -338,12 +360,15 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     }, TITLE_FLASH_MS);
   }
 
-  async function triggerAlertFeedback(isSoundEnabled: boolean) {
+  async function triggerAlertFeedback(
+    isSoundEnabled: boolean,
+    variant: "full" | "soft" = "full"
+  ) {
     flashTitle();
     triggerHaptics();
 
     if (isSoundEnabled) {
-      await playAlertSound();
+      await playAlertSound(variant);
     } else {
       setSoundStatus(
         "Llegó un evento nuevo. Activá sonido para escuchar la alerta en este dispositivo."

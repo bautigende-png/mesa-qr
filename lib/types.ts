@@ -43,7 +43,7 @@ export interface EventRecord {
   table_id: string;
   action: EventAction;
   status: EventStatus;
-  customer_email: string;
+  customer_email: string | null;
   marketing_opt_in: boolean;
   session_id: string;
   created_at: string;

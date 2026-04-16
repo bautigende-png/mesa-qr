@@ -142,17 +142,21 @@ export function CustomerActions({
     return () => window.clearInterval(interval);
   }, [sessionId, tableId]);
 
-  function validateSessionForAction() {
+  function getOptionalCustomerEmail() {
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       setFeedback({
         kind: "error",
-        message: "Ingresá un email válido antes de enviar el aviso."
+        message: "El email ingresado no parece válido. Podés corregirlo o dejarlo vacío."
       });
       return null;
     }
 
+    return normalizedEmail || "";
+  }
+
+  function validateSessionForAction() {
     if (!sessionId) {
       setFeedback({
         kind: "error",
@@ -169,7 +173,7 @@ export function CustomerActions({
       return null;
     }
 
-    return normalizedEmail;
+    return getOptionalCustomerEmail();
   }
 
   async function submitAction(
@@ -178,7 +182,7 @@ export function CustomerActions({
   ) {
     const normalizedEmail = validateSessionForAction();
 
-    if (!normalizedEmail) {
+    if (normalizedEmail === null) {
       return false;
     }
 
@@ -206,8 +210,8 @@ export function CustomerActions({
         tableId,
         sessionId,
         action,
-        customerEmail: normalizedEmail,
-        marketingOptIn
+        customerEmail: normalizedEmail || null,
+        marketingOptIn: normalizedEmail ? marketingOptIn : false
       })
     });
 
@@ -230,7 +234,11 @@ export function CustomerActions({
       return false;
     }
 
-    window.localStorage.setItem(EMAIL_KEY, normalizedEmail);
+    if (normalizedEmail) {
+      window.localStorage.setItem(EMAIL_KEY, normalizedEmail);
+    } else {
+      window.localStorage.removeItem(EMAIL_KEY);
+    }
     const cooldownUntil = Date.now() + EVENT_COOLDOWN_MS;
     window.localStorage.setItem(
       `${COOLDOWN_PREFIX}:${tableId}:${sessionId}:${action}`,
@@ -264,7 +272,7 @@ export function CustomerActions({
     }
 
     const normalizedEmail = validateSessionForAction();
-    if (!normalizedEmail) {
+    if (normalizedEmail === null) {
       return;
     }
 
@@ -422,84 +430,44 @@ export function CustomerActions({
                   Falta configurar el link del menú para esta marca.
                 </p>
               ) : null}
-            </div>
 
-            <div className="grid gap-3">
-              <label className="space-y-2">
-                <span className="text-sm font-medium text-slate-700">
-                  Tu email para confirmar el pedido de ayuda
-                </span>
-                <input
-                  className="input rounded-[20px]"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="nombre@email.com"
-                  required
-                />
-              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  className="button-secondary h-14 gap-2 rounded-[20px] text-base"
+                  disabled={loadingAction !== null || cooldowns.CALL_WAITER > Date.now()}
+                  onClick={() => submitAction("CALL_WAITER")}
+                  style={{
+                    backgroundColor: menuButtonBackground,
+                    borderColor: toRgba(primaryColor, 0.15),
+                    color: menuButtonTextColor
+                  }}
+                >
+                  <Bell className="h-4 w-4" />
+                  {loadingAction === "CALL_WAITER"
+                    ? "Enviando..."
+                    : cooldowns.CALL_WAITER > Date.now()
+                      ? `Disponible en ${Math.ceil((cooldowns.CALL_WAITER - Date.now()) / 1000)}s`
+                      : "Llamar al mozo"}
+                </button>
 
-              <label className="flex items-start gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
-                <input
-                  type="checkbox"
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
-                  checked={marketingOptIn}
-                  onChange={(event) => setMarketingOptIn(event.target.checked)}
-                />
-                <span className="text-sm leading-6 text-slate-600">
-                  Quiero recibir novedades, promociones y beneficios del restaurante.
-                </span>
-              </label>
-            </div>
-
-            {!isOnline ? (
-              <div className="flex items-start gap-3 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900">
-                <WifiOff className="mt-0.5 h-5 w-5 shrink-0" />
-                <div>
-                  <p className="font-medium">Sin conexión</p>
-                  <p className="mt-1 text-sm leading-6">
-                    El menú externo y los avisos al salón requieren internet.
-                  </p>
-                </div>
+                <button
+                  className="button-secondary h-14 gap-2 rounded-[20px] text-base"
+                  disabled={loadingAction !== null || cooldowns.REQUEST_BILL > Date.now()}
+                  onClick={() => submitAction("REQUEST_BILL")}
+                  style={{
+                    backgroundColor: billButtonBackground,
+                    borderColor: toRgba(secondaryColor, 0.2),
+                    color: billButtonTextColor
+                  }}
+                >
+                  <ReceiptText className="h-4 w-4" />
+                  {loadingAction === "REQUEST_BILL"
+                    ? "Enviando..."
+                    : cooldowns.REQUEST_BILL > Date.now()
+                      ? `Disponible en ${Math.ceil((cooldowns.REQUEST_BILL - Date.now()) / 1000)}s`
+                      : "Pedir la cuenta"}
+                </button>
               </div>
-            ) : null}
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                className="button-secondary h-14 gap-2 rounded-[20px] text-base"
-                disabled={loadingAction !== null || cooldowns.CALL_WAITER > Date.now()}
-                onClick={() => submitAction("CALL_WAITER")}
-                style={{
-                  backgroundColor: menuButtonBackground,
-                  borderColor: toRgba(primaryColor, 0.15),
-                  color: menuButtonTextColor
-                }}
-              >
-                <Bell className="h-4 w-4" />
-                {loadingAction === "CALL_WAITER"
-                  ? "Enviando..."
-                  : cooldowns.CALL_WAITER > Date.now()
-                    ? `Disponible en ${Math.ceil((cooldowns.CALL_WAITER - Date.now()) / 1000)}s`
-                    : "Llamar al mozo"}
-              </button>
-
-              <button
-                className="button-secondary h-14 gap-2 rounded-[20px] text-base"
-                disabled={loadingAction !== null || cooldowns.REQUEST_BILL > Date.now()}
-                onClick={() => submitAction("REQUEST_BILL")}
-                style={{
-                  backgroundColor: billButtonBackground,
-                  borderColor: toRgba(secondaryColor, 0.2),
-                  color: billButtonTextColor
-                }}
-              >
-                <ReceiptText className="h-4 w-4" />
-                {loadingAction === "REQUEST_BILL"
-                  ? "Enviando..."
-                  : cooldowns.REQUEST_BILL > Date.now()
-                    ? `Disponible en ${Math.ceil((cooldowns.REQUEST_BILL - Date.now()) / 1000)}s`
-                    : "Pedir la cuenta"}
-              </button>
             </div>
 
             <div
@@ -525,6 +493,43 @@ export function CustomerActions({
                 </p>
               </div>
             </div>
+
+            <div className="grid gap-3">
+              <label className="space-y-2">
+                <span className="text-sm font-medium text-slate-700">Email opcional</span>
+                <input
+                  className="input rounded-[20px]"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="nombre@email.com"
+                />
+              </label>
+
+              <label className="flex items-start gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
+                  checked={marketingOptIn}
+                  onChange={(event) => setMarketingOptIn(event.target.checked)}
+                />
+                <span className="text-sm leading-6 text-slate-600">
+                  Quiero recibir novedades, promociones y beneficios del restaurante si dejé mi email.
+                </span>
+              </label>
+            </div>
+
+            {!isOnline ? (
+              <div className="flex items-start gap-3 rounded-[24px] border border-amber-200 bg-amber-50 px-4 py-4 text-amber-900">
+                <WifiOff className="mt-0.5 h-5 w-5 shrink-0" />
+                <div>
+                  <p className="font-medium">Sin conexión</p>
+                  <p className="mt-1 text-sm leading-6">
+                    El menú externo y los avisos al salón requieren internet.
+                  </p>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

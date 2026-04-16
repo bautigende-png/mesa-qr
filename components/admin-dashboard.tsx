@@ -1076,7 +1076,9 @@ export function AdminDashboard({
                       {STATUS_LABELS[item.status]}
                     </span>
                   </div>
-                  <p className="mt-3 text-sm text-slate-600">{item.customer_email}</p>
+                  <p className="mt-3 text-sm text-slate-600">
+                    {item.customer_email ?? "Sin email"}
+                  </p>
                 </div>
                 <div className="space-y-1 text-sm text-slate-600">
                   <p>Creado hace {formatElapsed(item.created_at)}</p>

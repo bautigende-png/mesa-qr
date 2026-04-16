@@ -68,7 +68,7 @@ create table if not exists public.events (
   table_id uuid not null references public.restaurant_tables(id) on delete cascade,
   action public.event_action not null,
   status public.event_status not null default 'PENDING',
-  customer_email text not null,
+  customer_email text,
   marketing_opt_in boolean not null default false,
   session_id uuid not null,
   acknowledged_at timestamptz,

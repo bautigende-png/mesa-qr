@@ -10,7 +10,7 @@ const createEventSchema = z.object({
   tableId: z.string().uuid(),
   sessionId: z.string().uuid(),
   action: z.enum(["CALL_WAITER", "REQUEST_BILL", "VIEW_MENU"]),
-  customerEmail: z.string().email(),
+  customerEmail: z.string().trim().email().nullable().optional(),
   marketingOptIn: z.boolean().optional().default(false)
 });
 
@@ -52,8 +52,8 @@ export async function POST(request: NextRequest) {
       table_id: table.id,
       action: parsed.data.action,
       status: "PENDING",
-      customer_email: parsed.data.customerEmail,
-      marketing_opt_in: parsed.data.marketingOptIn,
+      customer_email: parsed.data.customerEmail ?? null,
+      marketing_opt_in: parsed.data.customerEmail ? parsed.data.marketingOptIn : false,
       session_id: parsed.data.sessionId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const { data, error } = await supabase.rpc("create_table_event", {
     p_action: parsed.data.action,
-    p_customer_email: parsed.data.customerEmail,
-    p_marketing_opt_in: parsed.data.marketingOptIn,
+    p_customer_email: parsed.data.customerEmail ?? null,
+    p_marketing_opt_in: parsed.data.customerEmail ? parsed.data.marketingOptIn : false,
     p_session_id: parsed.data.sessionId,
     p_table_id: parsed.data.tableId
   });

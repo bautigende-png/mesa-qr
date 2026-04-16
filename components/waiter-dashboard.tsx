@@ -543,7 +543,9 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
                     <h2 className="text-2xl font-semibold text-slate-900">
                       {ACTION_LABELS[event.action]}
                     </h2>
-                    <p className="mt-2 text-sm text-slate-600">Cliente: {event.customer_email}</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      Cliente: {event.customer_email ?? "Sin email"}
+                    </p>
                   </div>
                 </div>
 

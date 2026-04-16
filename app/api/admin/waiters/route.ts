@@ -9,7 +9,7 @@ import type { Profile } from "@/lib/types";
 
 const waiterSchema = z.object({
   full_name: z.string().trim().optional().default(""),
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8)
 });
 
@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
   const parsed = waiterSchema.safeParse(await request.json().catch(() => null));
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Revisá el email y usá una contraseña de al menos 8 caracteres." },
+      { status: 400 }
+    );
   }
 
   if (isDemoMode()) {
@@ -79,7 +82,17 @@ export async function POST(request: NextRequest) {
   });
 
   if (error || !data.user) {
-    return NextResponse.json({ error: error?.message ?? "No se pudo crear el usuario" }, { status: 500 });
+    const message = error?.message ?? "No se pudo crear el usuario";
+    const isDuplicate = message.toLowerCase().includes("already") || message.toLowerCase().includes("registered");
+
+    return NextResponse.json(
+      {
+        error: isDuplicate
+          ? "Ya existe un usuario con ese email."
+          : message
+      },
+      { status: isDuplicate ? 409 : 500 }
+    );
   }
 
   const { error: profileError } = await admin.from("profiles").upsert({

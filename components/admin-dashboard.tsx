@@ -56,6 +56,10 @@ export function AdminDashboard({
   const [savingTable, setSavingTable] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [creatingWaiter, setCreatingWaiter] = useState(false);
+  const [waiterMessage, setWaiterMessage] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
   const [historyFilters, setHistoryFilters] = useState({
     from: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     to: new Date().toISOString().slice(0, 10),
@@ -184,6 +188,7 @@ export function AdminDashboard({
 
   async function handleCreateWaiter(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setWaiterMessage(null);
     setCreatingWaiter(true);
 
     const response = await fetch("/api/admin/waiters", {
@@ -195,10 +200,19 @@ export function AdminDashboard({
     setCreatingWaiter(false);
 
     if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setWaiterMessage({
+        kind: "error",
+        text: payload?.error ?? "No se pudo crear el mozo. Revisá los datos e intentá de nuevo."
+      });
       return;
     }
 
     setNewWaiter({ full_name: "", email: "", password: "" });
+    setWaiterMessage({
+      kind: "success",
+      text: "Mozo creado correctamente. Ya puede ingresar al panel."
+    });
     await refreshWaiters();
   }
 
@@ -758,7 +772,6 @@ export function AdminDashboard({
                 onChange={(event) =>
                   setNewWaiter((current) => ({ ...current, full_name: event.target.value }))
                 }
-                required
               />
               <input
                 className="input"
@@ -781,6 +794,17 @@ export function AdminDashboard({
                 required
                 minLength={8}
               />
+              {waiterMessage ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    waiterMessage.kind === "success"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-rose-200 bg-rose-50 text-rose-800"
+                  }`}
+                >
+                  {waiterMessage.text}
+                </div>
+              ) : null}
               <button className="button-primary gap-2" disabled={creatingWaiter} type="submit">
                 {creatingWaiter ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Crear mozo

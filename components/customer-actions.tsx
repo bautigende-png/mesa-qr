@@ -17,6 +17,7 @@ import type { EventAction } from "@/lib/types";
 const SESSION_KEY = "mesa-lista.session-id";
 const EMAIL_KEY = "mesa-lista.customer-email";
 const COOLDOWN_PREFIX = "mesa-lista.cooldown";
+const SHOW_DIRECT_ORDER_BUTTON = false;
 
 interface CustomerActionsProps {
   tableId: string;
@@ -338,8 +339,7 @@ export function CustomerActions({
             </div>
 
             <p className="mt-4 text-sm leading-6" style={{ color: heroMutedTextColor }}>
-              Interfaz pensada para celular. Abrí el menú, pedí directo o avisale al salón
-              sin esperar.
+              Interfaz pensada para celular. Abrí el menú o avisale al salón sin esperar.
             </p>
 
             {bannerUrl ? (
@@ -386,26 +386,30 @@ export function CustomerActions({
             ) : null}
 
             <div className="grid gap-3">
-              <a
-                className={`button-primary h-14 gap-2 rounded-[20px] text-base ${!primaryUrl ? "pointer-events-none opacity-60" : ""}`}
-                href={primaryUrl ?? undefined}
-                aria-disabled={!primaryUrl}
-                onClick={(event) => {
-                  event.preventDefault();
-                  handleExternalExperience(primaryUrl, "Pedí directo");
-                }}
-                style={{
-                  backgroundColor: directButtonBackground,
-                  color: primaryButtonTextColor
-                }}
-              >
-                Pedí directo
-                <ExternalLink className="h-4 w-4" />
-              </a>
-              {!primaryUrl ? (
-                <p className="text-sm text-rose-600">
-                  Esta mesa todavía no tiene link de pedido configurado.
-                </p>
+              {SHOW_DIRECT_ORDER_BUTTON ? (
+                <>
+                  <a
+                    className={`button-primary h-14 gap-2 rounded-[20px] text-base ${!primaryUrl ? "pointer-events-none opacity-60" : ""}`}
+                    href={primaryUrl ?? undefined}
+                    aria-disabled={!primaryUrl}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handleExternalExperience(primaryUrl, "Pedí directo");
+                    }}
+                    style={{
+                      backgroundColor: directButtonBackground,
+                      color: primaryButtonTextColor
+                    }}
+                  >
+                    Pedí directo
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                  {!primaryUrl ? (
+                    <p className="text-sm text-rose-600">
+                      Esta mesa todavía no tiene link de pedido configurado.
+                    </p>
+                  ) : null}
+                </>
               ) : null}
 
               <a

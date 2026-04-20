@@ -20,6 +20,7 @@ function seedStore(): DemoStore {
       restaurant_name: "Bistro Central Demo",
       global_menu_url: "https://example.com/menu",
       direct_order_url: "https://example.com/pedi-directo",
+      direct_order_enabled: false,
       logo_url: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=400&q=80",
       mobile_banner_url: "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=1200&q=80",
       mobile_banner_text: "2x1 en vermú hasta las 20 hs",
@@ -58,6 +59,7 @@ function seedStore(): DemoStore {
         email: "mozo@demo.local",
         full_name: "Mozo Demo",
         role: "WAITER",
+        can_manage_direct_order: true,
         created_at: new Date(now).toISOString()
       }
     ],

@@ -17,13 +17,13 @@ import type { EventAction } from "@/lib/types";
 const SESSION_KEY = "mesa-lista.session-id";
 const EMAIL_KEY = "mesa-lista.customer-email";
 const COOLDOWN_PREFIX = "mesa-lista.cooldown";
-const SHOW_DIRECT_ORDER_BUTTON = false;
 
 interface CustomerActionsProps {
   tableId: string;
   tableName: string;
   restaurantName: string;
   primaryUrl: string | null;
+  directOrderEnabled: boolean;
   menuUrl: string | null;
   logoUrl: string | null;
   bannerUrl: string | null;
@@ -44,6 +44,7 @@ export function CustomerActions({
   tableName,
   restaurantName,
   primaryUrl,
+  directOrderEnabled,
   menuUrl,
   logoUrl,
   bannerUrl,
@@ -386,7 +387,7 @@ export function CustomerActions({
             ) : null}
 
             <div className="grid gap-3">
-              {SHOW_DIRECT_ORDER_BUTTON ? (
+              {directOrderEnabled ? (
                 <>
                   <a
                     className={`button-primary h-14 gap-2 rounded-[20px] text-base ${!primaryUrl ? "pointer-events-none opacity-60" : ""}`}

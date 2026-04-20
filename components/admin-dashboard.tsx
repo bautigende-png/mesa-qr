@@ -228,6 +228,22 @@ export function AdminDashboard({
     await refreshWaiters();
   }
 
+  async function handleToggleWaiterDirectOrderPermission(waiter: Profile) {
+    const response = await fetch(`/api/admin/waiters/${waiter.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        can_manage_direct_order: !waiter.can_manage_direct_order
+      })
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    await refreshWaiters();
+  }
+
   async function fetchHistory() {
     const params = new URLSearchParams();
     if (historyFilters.from) params.set("from", historyFilters.from);
@@ -421,6 +437,22 @@ export function AdminDashboard({
                     }
                     placeholder="https://..."
                   />
+                </label>
+                <label className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 md:col-span-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900"
+                    checked={settings.direct_order_enabled}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        direct_order_enabled: event.target.checked
+                      }))
+                    }
+                  />
+                  <span className="text-sm leading-6 text-slate-600">
+                    Mostrar temporalmente el botón "Pedí directo" en la vista cliente.
+                  </span>
                 </label>
                 <label className="space-y-2 md:col-span-2">
                   <span className="text-sm font-medium text-slate-700">Texto informativo / promo</span>
@@ -820,14 +852,27 @@ export function AdminDashboard({
                   <div>
                     <p className="font-semibold text-slate-900">{waiter.full_name ?? "Sin nombre"}</p>
                     <p className="text-sm text-slate-600">{waiter.email}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {waiter.can_manage_direct_order
+                        ? "Puede administrar Pedí directo"
+                        : "Sin permiso Pedí directo"}
+                    </p>
                   </div>
-                  <button
-                    className="button-secondary gap-2"
-                    onClick={() => handleDeleteWaiter(waiter.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Eliminar
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      className={waiter.can_manage_direct_order ? "button-primary gap-2" : "button-secondary gap-2"}
+                      onClick={() => handleToggleWaiterDirectOrderPermission(waiter)}
+                    >
+                      {waiter.can_manage_direct_order ? "Quitar permiso" : "Dar permiso"}
+                    </button>
+                    <button
+                      className="button-secondary gap-2"
+                      onClick={() => handleDeleteWaiter(waiter.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

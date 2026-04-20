@@ -32,6 +32,7 @@ create table if not exists public.profiles (
   email text not null unique,
   full_name text,
   role public.app_role not null default 'WAITER',
+  can_manage_direct_order boolean not null default false,
   created_at timestamptz not null default timezone('utc', now()),
   updated_at timestamptz not null default timezone('utc', now())
 );
@@ -52,6 +53,7 @@ create table if not exists public.settings (
   restaurant_name text not null,
   global_menu_url text,
   direct_order_url text,
+  direct_order_enabled boolean not null default false,
   logo_url text,
   mobile_banner_url text,
   mobile_banner_text text,

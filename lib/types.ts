@@ -8,6 +8,7 @@ export interface Profile {
   email: string;
   full_name: string | null;
   role: Role;
+  can_manage_direct_order: boolean;
   created_at: string;
 }
 
@@ -27,6 +28,7 @@ export interface Settings {
   restaurant_name: string;
   global_menu_url: string | null;
   direct_order_url: string | null;
+  direct_order_enabled: boolean;
   logo_url: string | null;
   mobile_banner_url: string | null;
   mobile_banner_text: string | null;

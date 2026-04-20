@@ -5,7 +5,7 @@ import { getSessionProfile } from "@/lib/auth";
 import { hasServiceRoleEnv, isDemoMode } from "@/lib/runtime";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import type { EventRecord } from "@/lib/types";
+import type { EventRecord, Settings } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,7 @@ export default async function WaiterPage() {
       <WaiterDashboard
         profile={demo.waiters[0]}
         initialEvents={demo.events.filter((event) => event.status !== "RESOLVED")}
+        initialDirectOrderEnabled={demo.settings.direct_order_enabled}
       />
     );
   }
@@ -37,12 +38,21 @@ export default async function WaiterPage() {
   const supabase = hasServiceRoleEnv()
     ? createSupabaseAdminClient()
     : await createSupabaseServerClient();
-  const { data: events } = await supabase
-    .from("events")
-    .select("*, restaurant_tables(id, table_name, sector)")
-    .neq("status", "RESOLVED")
-    .order("created_at", { ascending: true })
-    .limit(100);
+  const [{ data: events }, { data: settings }] = await Promise.all([
+    supabase
+      .from("events")
+      .select("*, restaurant_tables(id, table_name, sector)")
+      .neq("status", "RESOLVED")
+      .order("created_at", { ascending: true })
+      .limit(100),
+    supabase.from("settings").select("direct_order_enabled").eq("id", 1).maybeSingle()
+  ]);
 
-  return <WaiterDashboard profile={profile} initialEvents={((events as EventRecord[] | null) ?? [])} />;
+  return (
+    <WaiterDashboard
+      profile={profile}
+      initialEvents={((events as EventRecord[] | null) ?? [])}
+      initialDirectOrderEnabled={Boolean((settings as Pick<Settings, "direct_order_enabled"> | null)?.direct_order_enabled)}
+    />
+  );
 }

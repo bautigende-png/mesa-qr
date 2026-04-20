@@ -19,6 +19,7 @@ export default async function AdminPage() {
           email: "admin@demo.local",
           full_name: "Admin Demo",
           role: "ADMIN",
+          can_manage_direct_order: true,
           created_at: new Date().toISOString()
         }}
         initialTables={demo.tables}
@@ -71,6 +72,7 @@ export default async function AdminPage() {
       restaurant_name: settingsRes.data?.restaurant_name ?? "Mi Restaurante",
       global_menu_url: settingsRes.data?.global_menu_url ?? null,
       direct_order_url: settingsRes.data?.direct_order_url ?? null,
+      direct_order_enabled: settingsRes.data?.direct_order_enabled ?? false,
       logo_url: settingsRes.data?.logo_url ?? null,
       mobile_banner_url: settingsRes.data?.mobile_banner_url ?? null,
       mobile_banner_text: settingsRes.data?.mobile_banner_text ?? null,

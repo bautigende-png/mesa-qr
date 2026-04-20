@@ -6,10 +6,10 @@ import type { Profile, Role } from "@/lib/types";
 export async function requireApiRole(roles: Role[]) {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return {
       error: NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     };
@@ -18,7 +18,7 @@ export async function requireApiRole(roles: Role[]) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   const typedProfile = (profile as Profile | null) ?? null;
@@ -29,5 +29,5 @@ export async function requireApiRole(roles: Role[]) {
     };
   }
 
-  return { supabase, session, profile: typedProfile };
+  return { supabase, session: user, profile: typedProfile };
 }

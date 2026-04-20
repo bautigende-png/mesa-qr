@@ -46,15 +46,15 @@ export async function middleware(request: NextRequest) {
   const isWaiterPath = pathname.startsWith("/waiter") || pathname.startsWith("/api/waiter");
 
   if (!isAdminPath && !isWaiterPath) {
-    await supabase.auth.getSession();
+    await supabase.auth.getUser();
     return response;
   }
 
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -65,7 +65,7 @@ export async function middleware(request: NextRequest) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   const typedProfile = (profile as Profile | null) ?? null;

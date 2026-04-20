@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
       email: parsed.data.email,
       full_name: parsed.data.full_name || null,
       role: "WAITER" as const,
+      can_manage_direct_order: false,
       created_at: new Date().toISOString()
     };
     getDemoStore().waiters.unshift(waiter);
@@ -77,7 +78,8 @@ export async function POST(request: NextRequest) {
     email_confirm: true,
     user_metadata: {
       full_name: parsed.data.full_name,
-      role: "WAITER"
+      role: "WAITER",
+      can_manage_direct_order: false
     }
   });
 
@@ -99,7 +101,8 @@ export async function POST(request: NextRequest) {
     id: data.user.id,
     email: parsed.data.email,
     full_name: parsed.data.full_name || null,
-    role: "WAITER"
+    role: "WAITER",
+    can_manage_direct_order: false
   });
 
   if (profileError) {
@@ -112,7 +115,8 @@ export async function POST(request: NextRequest) {
       id: data.user.id,
       email: parsed.data.email,
       full_name: parsed.data.full_name || null,
-      role: "WAITER"
+      role: "WAITER",
+      can_manage_direct_order: false
     }
   });
 }

@@ -10,6 +10,7 @@ const settingsSchema = z.object({
   restaurant_name: z.string().min(1),
   global_menu_url: z.string().url().nullable().optional().or(z.literal("")),
   direct_order_url: z.string().url().nullable().optional().or(z.literal("")),
+  direct_order_enabled: z.boolean().optional().default(false),
   logo_url: z.string().url().nullable().optional().or(z.literal("")),
   mobile_banner_url: z.string().url().nullable().optional().or(z.literal("")),
   mobile_banner_text: z.string().nullable().optional().or(z.literal("")),
@@ -50,6 +51,7 @@ export async function PATCH(request: NextRequest) {
     restaurant_name?: string;
     global_menu_url?: string | null;
     direct_order_url?: string | null;
+    direct_order_enabled?: boolean;
     logo_url?: string | null;
     mobile_banner_url?: string | null;
     mobile_banner_text?: string | null;
@@ -63,6 +65,7 @@ export async function PATCH(request: NextRequest) {
     restaurant_name: raw?.restaurant_name,
     global_menu_url: raw?.global_menu_url || null,
     direct_order_url: raw?.direct_order_url || null,
+    direct_order_enabled: raw?.direct_order_enabled ?? false,
     logo_url: raw?.logo_url || null,
     mobile_banner_url: raw?.mobile_banner_url || null,
     mobile_banner_text: raw?.mobile_banner_text || null,
@@ -81,6 +84,7 @@ export async function PATCH(request: NextRequest) {
       restaurant_name: parsed.data.restaurant_name,
       global_menu_url: parsed.data.global_menu_url || null,
       direct_order_url: parsed.data.direct_order_url || null,
+      direct_order_enabled: parsed.data.direct_order_enabled,
       logo_url: parsed.data.logo_url || null,
       mobile_banner_url: parsed.data.mobile_banner_url || null,
       mobile_banner_text: parsed.data.mobile_banner_text || null,
@@ -104,6 +108,7 @@ export async function PATCH(request: NextRequest) {
       restaurant_name: parsed.data.restaurant_name,
       global_menu_url: parsed.data.global_menu_url || null,
       direct_order_url: parsed.data.direct_order_url || null,
+      direct_order_enabled: parsed.data.direct_order_enabled,
       logo_url: parsed.data.logo_url || null,
       mobile_banner_url: parsed.data.mobile_banner_url || null,
       mobile_banner_text: parsed.data.mobile_banner_text || null,

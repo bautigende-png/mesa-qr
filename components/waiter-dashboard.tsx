@@ -23,6 +23,7 @@ import { formatElapsed } from "@/lib/utils";
 interface WaiterDashboardProps {
   profile: Profile;
   initialEvents: EventRecord[];
+  initialDirectOrderEnabled: boolean;
 }
 
 const SOUND_KEY = "mesa-lista.waiter-sound-enabled";
@@ -103,10 +104,17 @@ function createAlertSoundDataUri(variant: "full" | "soft" = "full") {
   return `data:audio/wav;base64,${btoa(binary)}`;
 }
 
-export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps) {
+export function WaiterDashboard({
+  profile,
+  initialEvents,
+  initialDirectOrderEnabled
+}: WaiterDashboardProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [events, setEvents] = useState<EventRecord[]>(initialEvents);
+  const [directOrderEnabled, setDirectOrderEnabled] = useState(initialDirectOrderEnabled);
+  const [directOrderSaving, setDirectOrderSaving] = useState(false);
+  const [directOrderMessage, setDirectOrderMessage] = useState<string | null>(null);
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const [highlightedIds, setHighlightedIds] = useState<string[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -423,6 +431,42 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
     router.refresh();
   }
 
+  async function toggleDirectOrder() {
+    if (!profile.can_manage_direct_order) {
+      return;
+    }
+
+    const nextValue = !directOrderEnabled;
+    setDirectOrderSaving(true);
+    setDirectOrderMessage(null);
+
+    const response = await fetch("/api/waiter/direct-order", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ enabled: nextValue })
+    });
+
+    setDirectOrderSaving(false);
+
+    const payload = (await response.json().catch(() => null)) as
+      | { direct_order_enabled?: boolean; error?: string }
+      | null;
+
+    if (!response.ok) {
+      setDirectOrderMessage(payload?.error ?? "No se pudo actualizar Pedí directo.");
+      return;
+    }
+
+    setDirectOrderEnabled(Boolean(payload?.direct_order_enabled));
+    setDirectOrderMessage(
+      payload?.direct_order_enabled
+        ? "Pedí directo quedó habilitado para clientes."
+        : "Pedí directo quedó deshabilitado para clientes."
+    );
+  }
+
   const pendingCount = events.filter(
     (event) => event.status === "PENDING" && event.action !== "VIEW_MENU"
   ).length;
@@ -453,7 +497,7 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
       </section>
 
       <section className="panel p-5 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Sonido de alertas</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">{soundStatus}</p>
@@ -493,6 +537,34 @@ export function WaiterDashboard({ profile, initialEvents }: WaiterDashboardProps
           </div>
         </div>
       </section>
+
+      {profile.can_manage_direct_order ? (
+        <section className="panel p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Pedí directo</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                Estado actual:{" "}
+                <span className="font-semibold text-slate-900">
+                  {directOrderEnabled ? "habilitado" : "deshabilitado"}
+                </span>
+                . Este botón se muestra u oculta en la vista cliente.
+              </p>
+              {directOrderMessage ? (
+                <p className="mt-2 text-sm text-slate-500">{directOrderMessage}</p>
+              ) : null}
+            </div>
+            <button
+              className={directOrderEnabled ? "button-secondary gap-2" : "button-primary gap-2"}
+              disabled={directOrderSaving}
+              onClick={toggleDirectOrder}
+            >
+              {directOrderSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {directOrderEnabled ? "Deshabilitar" : "Habilitar"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4">
         {events.length === 0 ? (

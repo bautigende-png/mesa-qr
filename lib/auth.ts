@@ -6,20 +6,20 @@ import type { Profile, Role } from "@/lib/types";
 export async function getSessionProfile() {
   const supabase = await createSupabaseServerClient();
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return { session: null, profile: null as Profile | null };
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .maybeSingle();
 
-  return { session, profile: (profile as Profile | null) ?? null };
+  return { session: user, profile: (profile as Profile | null) ?? null };
 }
 
 export async function requireRole(roles: Role[]) {
